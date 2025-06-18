@@ -1,0 +1,24 @@
+# Excluir scripts que ejecutan comandos del sistema
+scripts/
+deploy.sh
+ecosystem.config.js
+
+# Excluir archivos de certificados
+*.pem
+*.key
+certificates/
+
+# Excluir logs
+logs/
+*.log
+
+# Excluir archivos de configuración local
+.env.local
+.env.production
+nginx.conf.example
+
+# Excluir documentación que no es necesaria para el build
+*.md
+QR_MASIVO.md
+FUNCIONALIDADES.md
+VERCEL_FIXES.md 

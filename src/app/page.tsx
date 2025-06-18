@@ -1,12 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { io, Socket } from 'socket.io-client'
 import { toast } from 'react-toastify'
 import RegistroForm from '@/components/RegistroForm'
 import ListaAsistentes from '@/components/ListaAsistentes'
 import EscarapelaPreview from '@/components/EscarapelaPreview'
 import QRScanner from '@/components/QRScanner'
+
+// Socket.io types para evitar errores de compilación
+interface Socket {
+  connected?: boolean
+  emit?: (event: string, data: any) => void
+  close?: () => void
+}
 
 interface Asistente {
   id: string
@@ -47,6 +53,9 @@ export default function Home() {
       // Inicializar Socket.io solo en desarrollo local
       const initSocket = async () => {
         try {
+          // Socket.io solo para desarrollo local
+          const { io } = await import('socket.io-client')
+          
           // Inicializar servidor Socket.io
           await fetch('/api/socket.io', { method: 'GET' })
           
@@ -226,13 +235,15 @@ export default function Home() {
     cargarAsistentes()
 
     return () => {
-      socket?.close()
+      if (socket?.close) {
+        socket.close()
+      }
     }
   }, [])
 
   // Función para notificar eventos a otros clientes
   const notificarEvento = (evento: string, data: any) => {
-    if (socket?.connected) {
+    if (socket?.connected && socket.emit) {
       socket.emit(evento, data)
     }
   }
