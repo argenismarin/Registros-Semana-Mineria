@@ -20,26 +20,22 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const scanningRef = useRef<boolean>(false)
   const animationRef = useRef<number | null>(null)
 
-  // Función para limpiar todos los recursos
+  // Función para limpiar recursos
   const cleanup = useCallback(() => {
     console.log('🧹 Limpiando recursos...')
     
-    // Detener stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
-        console.log('🛑 Deteniendo track:', track.kind)
         track.stop()
       })
       streamRef.current = null
     }
 
-    // Cancelar animación
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current)
       animationRef.current = null
     }
 
-    // Resetear estado
     scanningRef.current = false
     setIsScanning(false)
   }, [])
@@ -49,27 +45,21 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     return cleanup
   }, [cleanup])
 
-  // Función simple para iniciar la cámara
+  // Función para iniciar cámara
   const startCamera = useCallback(async () => {
     console.log('🎥 === INICIANDO CÁMARA ===')
     
     try {
-      // Limpiar recursos anteriores
       cleanup()
-      
-      // Resetear estados
       setIsLoading(true)
       setError(null)
-      setHasPermission(null)
 
-      // Verificar soporte básico
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('getUserMedia no soportado en este navegador')
+        throw new Error('getUserMedia no soportado')
       }
 
       console.log('📱 Solicitando permisos de cámara...')
       
-      // Configuración simple y compatible
       const constraints = {
         video: {
           facingMode: { ideal: 'environment' },
@@ -79,66 +69,82 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         audio: false
       }
 
-      console.log('🔧 Constraints:', constraints)
-      
-      // Obtener stream
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      console.log('✅ Stream obtenido:', stream.id)
+      console.log('✅ Stream obtenido')
 
       streamRef.current = stream
       setHasPermission(true)
 
-      // Configurar video
       if (videoRef.current) {
         const video = videoRef.current
-        console.log('📺 Configurando elemento video...')
+        console.log('📺 Configurando video...')
 
         video.srcObject = stream
         video.muted = true
         video.playsInline = true
         video.autoplay = true
 
-        // Evento simple cuando el video esté listo
-        const handleVideoReady = () => {
-          console.log('🎬 Video listo - dimensiones:', video.videoWidth, 'x', video.videoHeight)
-          
-          if (video.videoWidth > 0 && video.videoHeight > 0) {
-            setIsLoading(false)
+        // Función simple que progresa SIEMPRE
+        const progressToScanning = () => {
+          console.log('🎬 Progresando a escaneo...')
+          setIsLoading(false)
+          // Dar un momento para que se renderice la UI y luego empezar
+          setTimeout(() => {
             startScanning()
-          } else {
-            console.log('⚠️ Video sin dimensiones, reintentando...')
-            setTimeout(handleVideoReady, 200)
+          }, 100)
+        }
+
+        // Eventos múltiples pero que progresan de todas formas
+        let progressTriggered = false
+
+        const triggerProgress = () => {
+          if (!progressTriggered) {
+            progressTriggered = true
+            progressToScanning()
           }
         }
 
-        // Múltiples eventos para asegurar detección
         video.onloadedmetadata = () => {
           console.log('📊 Metadata cargada')
-          handleVideoReady()
+          triggerProgress()
         }
 
         video.oncanplay = () => {
           console.log('▶️ Video puede reproducirse')
-          handleVideoReady()
+          triggerProgress()
         }
 
-        video.onloadeddata = () => {
-          console.log('💾 Datos del video cargados')
-          handleVideoReady()
-        }
-
-        // Iniciar reproducción
+        // Intentar play
         try {
           await video.play()
           console.log('🎵 Video reproduciéndose')
           
-          // Verificación adicional después de play
-          setTimeout(handleVideoReady, 500)
+          // Si play fue exitoso, progresar después de un momento
+          setTimeout(() => {
+            if (!progressTriggered) {
+              console.log('⏰ Timeout - forzando progreso después de play exitoso')
+              triggerProgress()
+            }
+          }, 1000)
+          
         } catch (playError) {
           console.warn('⚠️ Error en play:', playError)
-          // Aún así intentar inicializar
-          setTimeout(handleVideoReady, 1000)
+          // Aún así progresar - el video puede funcionar
+          setTimeout(() => {
+            if (!progressTriggered) {
+              console.log('⏰ Timeout - forzando progreso a pesar del error de play')
+              triggerProgress()
+            }
+          }, 1500)
         }
+
+        // Timeout de seguridad - SIEMPRE progresa después de 3 segundos
+        setTimeout(() => {
+          if (!progressTriggered) {
+            console.log('🚨 Timeout de seguridad - forzando progreso')
+            triggerProgress()
+          }
+        }, 3000)
       }
 
     } catch (error) {
@@ -170,7 +176,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     }
   }, [cleanup])
 
-  // Función para iniciar el escaneo
+  // Función para iniciar escaneo (más tolerante)
   const startScanning = useCallback(() => {
     console.log('🔍 === INICIANDO ESCANEO ===')
     
@@ -193,34 +199,34 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       return
     }
 
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      console.log('⏳ Video sin dimensiones, reintentando...')
-      setTimeout(() => startScanning(), 500)
-      return
-    }
-
     scanningRef.current = true
     setIsScanning(true)
-    console.log('✅ Escaneo iniciado exitosamente')
+    console.log('✅ Escaneo iniciado')
 
     const scanFrame = () => {
       if (!scanningRef.current) return
 
       try {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        context.drawImage(video, 0, 0, canvas.width, canvas.height)
-        
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-        const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
-        
-        if (qrCode) {
-          console.log('🎯 QR detectado:', qrCode.data)
-          scanningRef.current = false
-          setIsScanning(false)
-          cleanup()
-          onScan(qrCode.data)
-          return
+        // Solo intentar si hay dimensiones válidas, sino saltar este frame
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+          context.drawImage(video, 0, 0, canvas.width, canvas.height)
+          
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height)
+          
+          if (qrCode) {
+            console.log('🎯 QR detectado:', qrCode.data)
+            scanningRef.current = false
+            setIsScanning(false)
+            cleanup()
+            onScan(qrCode.data)
+            return
+          }
+        } else {
+          // Video aún sin dimensiones, pero continuar intentando
+          // console.log('⏳ Video sin dimensiones aún...')
         }
       } catch (error) {
         console.warn('⚠️ Error en frame:', error)
@@ -234,9 +240,9 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     scanFrame()
   }, [onScan, cleanup])
 
-  // Inicializar al montar
+  // Inicializar
   useEffect(() => {
-    console.log('🚀 Componente montado, iniciando cámara...')
+    console.log('🚀 Componente montado')
     startCamera()
   }, [startCamera])
 
@@ -249,7 +255,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   }
 
   const handleRestart = () => {
-    console.log('🔄 === REINICIANDO ===')
+    console.log('🔄 REINICIANDO')
     cleanup()
     setTimeout(() => {
       setHasPermission(null)
@@ -260,7 +266,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   }
 
   const handleClose = () => {
-    console.log('❌ === CERRANDO ===')
+    console.log('❌ CERRANDO')
     cleanup()
     if (onClose) {
       onClose()
@@ -279,7 +285,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
           </p>
           
           <div className="text-xs text-gray-500 mb-4">
-            Abre la consola del navegador (F12) para ver el progreso
+            Se forzará el progreso en máximo 3 segundos
           </div>
           
           <div className="flex gap-2">
@@ -312,14 +318,6 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             <p className="text-gray-600 mb-4 text-sm">
               {error || 'No se pudo acceder a la cámara'}
             </p>
-            
-            <div className="text-left text-xs text-gray-600 mb-4 bg-gray-50 p-3 rounded">
-              <strong>Soluciones:</strong><br/>
-              • Permite el acceso a la cámara<br/>
-              • Cierra otras apps que usen la cámara<br/>
-              • Recarga la página<br/>
-              • Abre la consola (F12) para más detalles
-            </div>
             
             <div className="space-y-2">
               <button
