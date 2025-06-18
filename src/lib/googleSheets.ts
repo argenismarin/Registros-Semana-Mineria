@@ -1,6 +1,6 @@
 import { google, sheets_v4 } from 'googleapis'
 import { GoogleAuth } from 'google-auth-library'
-import { Asistente } from './database'
+import { type Asistente } from './database'
 
 class GoogleSheetsService {
   private sheets: sheets_v4.Sheets | null = null
