@@ -8,6 +8,8 @@ export async function GET(
 ) {
   try {
     const id = params.id
+    const { searchParams } = new URL(request.url)
+    const format = searchParams.get('format') // 'json' (default) or 'image'
     
     // Buscar el asistente
     const asistente = db.findAsistenteById(id)
@@ -27,6 +29,28 @@ export async function GET(
       timestamp: new Date().toISOString()
     })
 
+    // Si se solicita imagen directamente
+    if (format === 'image') {
+      const qrCodeBuffer = await QRCode.toBuffer(qrData, {
+        type: 'png',
+        width: 512,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+
+      return new NextResponse(qrCodeBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Disposition': `attachment; filename="qr-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}.png"`
+        }
+      })
+    }
+
+    // Respuesta JSON por defecto
     // Generar el código QR como SVG
     const qrCodeSvg = await QRCode.toString(qrData, {
       type: 'svg',

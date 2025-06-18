@@ -209,20 +209,40 @@ export default function Home() {
   const generarQRAsistente = async (asistente: Asistente) => {
     try {
       const response = await fetch(`/api/qr/generate/${asistente.id}`)
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
       
-      // Crear ventana de descarga
+      if (!response.ok) {
+        throw new Error('Error en la respuesta del servidor')
+      }
+
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Error generando código QR')
+      }
+
+      // Crear elemento para descargar la imagen desde dataUrl
+      const dataUrl = data.qrCode.dataUrl
       const a = document.createElement('a')
-      a.href = url
-      a.download = `qr-${asistente.nombre.replace(/\s+/g, '-')}.png`
+      a.href = dataUrl
+      a.download = `qr-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}.png`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      
+      // Marcar como QR generado
+      try {
+        await fetch('/api/qr/marcar-generados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asistentesIds: [asistente.id] })
+        })
+      } catch (error) {
+        console.warn('Error marcando QR como generado:', error)
+      }
       
       toast.success(`Código QR generado para ${asistente.nombre}`)
     } catch (error) {
+      console.error('Error generando QR:', error)
       toast.error('Error generando código QR')
     }
   }
@@ -375,6 +395,12 @@ export default function Home() {
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition text-sm"
               >
                 🎉 Evento
+              </a>
+              <a
+                href="/test-qr"
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition text-sm"
+              >
+                🧪 Test QR
               </a>
             </div>
           </div>
