@@ -1,12 +1,6 @@
 {
   "version": 2,
   "name": "registro-eventos",
-  "builds": [
-    {
-      "src": "next.config.js",
-      "use": "@vercel/next"
-    }
-  ],
   "routes": [
     {
       "src": "/api/socket.io/(.*)",
