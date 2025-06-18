@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Colores del sistema */
+  --color-primary: #2563eb;    /* Azul principal */
+  --color-primary-dark: #1d4ed8;
+  --color-success: #16a34a;    /* Verde success */
+  --color-success-dark: #15803d;
+  --color-warning: #ca8a04;    /* Amarillo warning */
+  --color-danger: #dc2626;     /* Rojo danger */
+  --color-info: #0891b2;       /* Azul info */
+  
+  /* Fondos y textos */
+  --background-primary: #ffffff;
+  --background-secondary: #f8fafc;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --border-color: #e5e7eb;
+}
+
+/* Clases personalizadas para los colores del evento */
+.bg-event-blue { 
+  background-color: var(--color-primary); 
+}
+.bg-event-green { 
+  background-color: var(--color-success); 
+}
+.text-event-blue { 
+  color: var(--color-primary); 
+}
+.text-event-green { 
+  color: var(--color-success); 
+}
+.border-event-blue { 
+  border-color: var(--color-primary); 
+}
+.border-event-green { 
+  border-color: var(--color-success); 
+}
+.ring-event-blue { 
+  --tw-ring-color: var(--color-primary); 
+}
+
+body {
+  background-color: var(--background-secondary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.escarapela {
+  width: 85mm;
+  height: 54mm;
+  border: 2px solid #000;
+  border-radius: 8px;
+  padding: 10px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+}
+
+.escarapela h2 {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.escarapela .nombre {
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+  margin: 10px 0;
+}
+
+.escarapela .cargo {
+  font-size: 14px;
+  text-align: center;
+  color: #666;
+}
+
+@media print {
+  body {
+    background: white;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  .escarapela {
+    border: 2px solid #000;
+    page-break-inside: avoid;
+  }
+} 

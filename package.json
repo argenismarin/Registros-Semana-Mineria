@@ -1,0 +1,52 @@
+{
+  "name": "registro-eventos",
+  "version": "1.0.0",
+  "description": "Plataforma de registro de eventos en tiempo real",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "dev:https": "concurrently \"next dev\" \"local-ssl-proxy --source 3001 --target 3000 --cert localhost.pem --key localhost-key.pem\"",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "setup-https": "node scripts/generate-cert.js",
+    "get-ip": "node -e \"const os = require('os'); const nets = os.networkInterfaces(); for (const name of Object.keys(nets)) { for (const net of nets[name]) { if (net.family === 'IPv4' && !net.internal) { console.log('Tu IP local es:', net.address); } } }\"",
+    "setup-google-sheets": "node scripts/setup-google-sheets.js",
+    "fix-env": "node scripts/fix-env.js",
+    "test-tiempo-real": "node scripts/test-tiempo-real.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.6.0",
+    "@types/node": "^20.0.0",
+    "@types/qrcode": "^1.5.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/uuid": "^9.0.0",
+    "autoprefixer": "^10.4.0",
+    "axios": "^1.6.0",
+    "date-fns": "^2.30.0",
+    "google-auth-library": "^9.4.0",
+    "googleapis": "^128.0.0",
+    "html2canvas": "^1.4.0",
+    "jspdf": "^2.5.2",
+    "jsqr": "^1.4.0",
+    "local-ssl-proxy": "^2.0.5",
+    "next": "^14.0.0",
+    "postcss": "^8.4.0",
+    "prisma": "^5.6.0",
+    "qrcode": "^1.5.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-toastify": "^9.1.0",
+    "socket.io": "^4.7.0",
+    "socket.io-client": "^4.7.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5.0.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0"
+  }
+}
