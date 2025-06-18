@@ -7,12 +7,7 @@ import ListaAsistentes from '@/components/ListaAsistentes'
 import EscarapelaPreview from '@/components/EscarapelaPreview'
 import QRScanner from '@/components/QRScanner'
 
-// Socket.io types para evitar errores de compilación
-interface Socket {
-  connected?: boolean
-  emit?: (event: string, data: any) => void
-  close?: () => void
-}
+
 
 interface Asistente {
   id: string
@@ -30,222 +25,27 @@ interface Asistente {
 }
 
 export default function Home() {
-  const [socket, setSocket] = useState<Socket | null>(null)
   const [asistentes, setAsistentes] = useState<Asistente[]>([])
   const [loading, setLoading] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
   const [mostrarQRScanner, setMostrarQRScanner] = useState(false)
-  const [clientesConectados, setClientesConectados] = useState(0)
 
   useEffect(() => {
-    // Detectar si estamos en Vercel (serverless) o desarrollo local
-    const isVercel = process.env.VERCEL_URL || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
-    
-    if (isVercel) {
-      // En Vercel, usar modo compatibilidad sin WebSockets
-      console.log('🌐 Modo serverless detectado (Vercel)')
-      toast.info('🌐 Conectado (modo serverless)', {
-        position: 'bottom-right',
-        autoClose: 2000,
-      })
-    } else {
-      // Inicializar Socket.io solo en desarrollo local
-      const initSocket = async () => {
-        try {
-          // Socket.io solo para desarrollo local
-          const { io } = await import('socket.io-client')
-          
-          // Inicializar servidor Socket.io
-          await fetch('/api/socket.io', { method: 'GET' })
-          
-          // Conectar cliente
-          const newSocket = io({
-            autoConnect: true,
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-          })
-
-          newSocket.on('connect', () => {
-            console.log('✅ Conectado al servidor en tiempo real')
-            toast.success('Conectado - Actualizaciones en tiempo real activas', {
-              position: 'bottom-right',
-              autoClose: 2000,
-            })
-          })
-
-          newSocket.on('disconnect', () => {
-            console.log('❌ Desconectado del servidor')
-            toast.warn('Conexión perdida - Intentando reconectar...', {
-              position: 'bottom-right',
-              autoClose: 3000,
-            })
-          })
-
-          newSocket.on('reconnect', () => {
-            console.log('🔄 Reconectado al servidor')
-            toast.success('Reconectado - Actualizaciones en tiempo real activas', {
-              position: 'bottom-right',
-              autoClose: 2000,
-            })
-            cargarAsistentes() // Recargar datos tras reconexión
-          })
-
-        // Actualizaciones en tiempo real de asistentes
-        newSocket.on('asistente-actualizado', (asistente: Asistente) => {
-          console.log('📝 Asistente actualizado:', asistente.nombre)
-          setAsistentes(prev => {
-            const index = prev.findIndex(a => a.id === asistente.id)
-            if (index >= 0) {
-              const updated = [...prev]
-              updated[index] = asistente
-              return updated
-            }
-            return prev
-          })
-          toast.info(`📝 ${asistente.nombre} actualizado`, {
-            position: 'bottom-right',
-            autoClose: 3000,
-          })
-        })
-
-        newSocket.on('nuevo-asistente', (asistente: Asistente) => {
-          console.log('👤 Nuevo asistente:', asistente.nombre)
-          setAsistentes(prev => {
-            // Evitar duplicados
-            if (prev.find(a => a.id === asistente.id)) {
-              return prev
-            }
-            return [...prev, asistente]
-          })
-          toast.success(`👤 ¡Nuevo registro! ${asistente.nombre}`, {
-            position: 'bottom-right',
-            autoClose: 4000,
-          })
-        })
-
-        newSocket.on('asistencia-marcada', (data: { asistente: Asistente, device: string }) => {
-          console.log('✅ Asistencia marcada:', data.asistente.nombre)
-          setAsistentes(prev => 
-            prev.map(a => 
-              a.id === data.asistente.id ? { ...a, presente: true, horaLlegada: data.asistente.horaLlegada } : a
-            )
-          )
-          toast.success(`✅ ${data.asistente.nombre} marcado presente${data.device ? ` (${data.device})` : ''}`, {
-            position: 'bottom-right',
-            autoClose: 4000,
-          })
-        })
-
-        newSocket.on('qr-escaneado', (data: { asistente: Asistente, device: string }) => {
-          console.log('📱 QR escaneado:', data.asistente.nombre)
-          setAsistentes(prev => 
-            prev.map(a => 
-              a.id === data.asistente.id ? { ...a, presente: true, horaLlegada: data.asistente.horaLlegada } : a
-            )
-          )
-          toast.success(`📱 QR escaneado: ${data.asistente.nombre} presente`, {
-            position: 'bottom-right',
-            autoClose: 4000,
-          })
-        })
-
-        newSocket.on('escarapela-impresa', (asistente: Asistente) => {
-          console.log('🖨️ Escarapela impresa:', asistente.nombre)
-          setAsistentes(prev => 
-            prev.map(a => 
-              a.id === asistente.id ? { ...a, escarapelaImpresa: true } : a
-            )
-          )
-          toast.info(`🖨️ Escarapela impresa: ${asistente.nombre}`, {
-            position: 'bottom-right',
-            autoClose: 3000,
-          })
-        })
-
-        // Contador de clientes conectados
-        newSocket.on('clientes-conectados', (count: number) => {
-          setClientesConectados(count)
-        })
-
-        // Importación masiva
-        newSocket.on('importacion-masiva', (data: { cantidad: number, asistentes: any[] }) => {
-          console.log('📁 Importación masiva:', data.cantidad, 'asistentes')
-          
-          // Agregar todos los asistentes importados
-          setAsistentes(prev => [...prev, ...data.asistentes])
-          
-          toast.success(`📁 ¡Importación masiva! ${data.cantidad} asistentes agregados`, {
-            position: 'bottom-right',
-            autoClose: 5000,
-          })
-        })
-
-        // QR Masivo generado
-        newSocket.on('qr-masivo-generado', (data: { cantidad: number, mensaje: string }) => {
-          console.log('📱 QR masivo generado:', data.cantidad, 'códigos QR')
-          
-          toast.success(`📱 ${data.mensaje}`, {
-            position: 'bottom-right',
-            autoClose: 5000,
-          })
-          
-          // Recargar asistentes para actualizar estado QR generado
-          cargarAsistentes()
-        })
-
-        // Asistente actualizado
-        newSocket.on('asistente-actualizado', (asistenteActualizado: Asistente) => {
-          console.log('✏️ Asistente actualizado:', asistenteActualizado.nombre)
-          
-          setAsistentes(prev => 
-            prev.map(a => a.id === asistenteActualizado.id ? asistenteActualizado : a)
-          )
-          
-          toast.info(`✏️ ${asistenteActualizado.nombre} actualizado`, {
-            position: 'bottom-right',
-            autoClose: 3000,
-          })
-        })
-
-        // Asistente eliminado
-        newSocket.on('asistente-eliminado', (data: { id: string, nombre: string }) => {
-          console.log('🗑️ Asistente eliminado:', data.nombre)
-          
-          setAsistentes(prev => prev.filter(a => a.id !== data.id))
-          
-          toast.warning(`🗑️ ${data.nombre} eliminado`, {
-            position: 'bottom-right',
-            autoClose: 3000,
-          })
-        })
-
-          setSocket(newSocket)
-          
-        } catch (error) {
-          console.error('Error iniciando Socket.io:', error)
-          toast.error('Error conectando tiempo real')
-        }
-      }
-
-      initSocket()
-    }
+    // En entorno Vercel (serverless), no usar tiempo real
+    console.log('🌐 Modo serverless - Sin tiempo real')
+    toast.info('🌐 Aplicación cargada (modo serverless)', {
+      position: 'bottom-right',
+      autoClose: 2000,
+    })
 
     cargarAsistentes()
-
-    return () => {
-      if (socket?.close) {
-        socket.close()
-      }
-    }
   }, [])
 
-  // Función para notificar eventos a otros clientes
+  // Función para notificar eventos (simplificada para Vercel)
   const notificarEvento = (evento: string, data: any) => {
-    if (socket?.connected && socket.emit) {
-      socket.emit(evento, data)
-    }
+    // En modo serverless, solo hacer log del evento
+    console.log(`📡 Evento: ${evento}`, data)
   }
 
   const cargarAsistentes = async () => {
@@ -529,16 +329,11 @@ export default function Home() {
                 <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                 <span>Pendientes: {totalPendientes}</span>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1 bg-purple-100 rounded-full">
-                <div className={`w-2 h-2 rounded-full ${socket?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span>Tiempo Real {socket?.connected ? '✓' : '✗'}</span>
+              <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                <span>Modo Serverless</span>
               </div>
-              {clientesConectados > 0 && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-indigo-100 rounded-full">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                  <span>{clientesConectados} conectados</span>
-                </div>
-              )}
+
             </div>
             
             <div className="flex gap-2 mt-4 sm:mt-0">
