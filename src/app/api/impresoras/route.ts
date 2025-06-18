@@ -1,83 +1,39 @@
 import { NextResponse } from 'next/server'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-
-const execAsync = promisify(exec)
 
 export async function GET() {
   try {
-    let impresoras: string[] = []
-
-    // Detectar SO y ejecutar comando apropiado
-    const platform = process.platform
-
-    if (platform === 'win32') {
-      // Windows: usar wmic
-      try {
-        const { stdout } = await execAsync('wmic printer get name /format:list')
-        impresoras = stdout
-          .split('\n')
-          .filter(line => line.startsWith('Name='))
-          .map(line => line.replace('Name=', '').trim())
-          .filter(name => name && name !== '')
-      } catch (error) {
-        console.error('Error obteniendo impresoras Windows:', error)
-      }
-    } else if (platform === 'darwin') {
-      // macOS: usar lpstat
-      try {
-        const { stdout } = await execAsync('lpstat -p')
-        impresoras = stdout
-          .split('\n')
-          .filter(line => line.startsWith('printer'))
-          .map(line => line.split(' ')[1])
-          .filter(name => name)
-      } catch (error) {
-        console.error('Error obteniendo impresoras macOS:', error)
-      }
-    } else {
-      // Linux: usar lpstat
-      try {
-        const { stdout } = await execAsync('lpstat -p')
-        impresoras = stdout
-          .split('\n')
-          .filter(line => line.startsWith('printer'))
-          .map(line => line.split(' ')[1])
-          .filter(name => name)
-      } catch (error) {
-        console.error('Error obteniendo impresoras Linux:', error)
-      }
-    }
-
-    // Agregar impresoras comunes si no se detectaron
-    if (impresoras.length === 0) {
-      impresoras = [
-        'Microsoft Print to PDF',
-        'Impresora predeterminada',
-        'HP LaserJet',
-        'Canon PIXMA',
-        'Epson L3150'
-      ]
-    }
+    // En entorno serverless (como Vercel), no podemos acceder a impresoras del sistema
+    // Devolvemos impresoras comunes/virtuales disponibles en navegadores
+    const impresoras = [
+      'Guardar como PDF',
+      'Microsoft Print to PDF', 
+      'Imprimir en navegador',
+      'HP LaserJet (Red)',
+      'Canon PIXMA (WiFi)',
+      'Epson L3150 (USB)',
+      'Brother HL-L2320D',
+      'Samsung ML-1640'
+    ]
 
     return NextResponse.json({
       impresoras,
-      platform,
-      detectadas: impresoras.length > 5 ? 'automáticamente' : 'por defecto'
+      platform: 'serverless',
+      detectadas: 'predeterminadas',
+      note: 'En entorno serverless se usan impresoras predeterminadas. La impresión real se maneja por el navegador.'
     })
 
   } catch (error) {
-    console.error('Error general obteniendo impresoras:', error)
+    console.error('Error obteniendo impresoras:', error)
     
-    // Fallback: devolver impresoras comunes
+    // Fallback mínimo
     return NextResponse.json({
       impresoras: [
-        'Microsoft Print to PDF',
-        'Impresora predeterminada'
+        'Guardar como PDF',
+        'Imprimir en navegador'
       ],
-      platform: process.platform,
+      platform: 'serverless',
       detectadas: 'fallback',
-      error: 'No se pudieron detectar impresoras automáticamente'
+      error: 'Error al cargar lista de impresoras'
     })
   }
 } 
