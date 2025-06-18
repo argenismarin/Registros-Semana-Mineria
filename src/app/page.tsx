@@ -33,44 +33,55 @@ export default function Home() {
   const [clientesConectados, setClientesConectados] = useState(0)
 
   useEffect(() => {
-    // Inicializar Socket.io con configuración mejorada
-    const initSocket = async () => {
-      try {
-        // Inicializar servidor Socket.io
-        await fetch('/api/socket.io', { method: 'GET' })
-        
-        // Conectar cliente
-        const newSocket = io({
-          autoConnect: true,
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-        })
-
-        newSocket.on('connect', () => {
-          console.log('✅ Conectado al servidor en tiempo real')
-          toast.success('Conectado - Actualizaciones en tiempo real activas', {
-            position: 'bottom-right',
-            autoClose: 2000,
+    // Detectar si estamos en Vercel (serverless) o desarrollo local
+    const isVercel = process.env.VERCEL_URL || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app'))
+    
+    if (isVercel) {
+      // En Vercel, usar modo compatibilidad sin WebSockets
+      console.log('🌐 Modo serverless detectado (Vercel)')
+      toast.info('🌐 Conectado (modo serverless)', {
+        position: 'bottom-right',
+        autoClose: 2000,
+      })
+    } else {
+      // Inicializar Socket.io solo en desarrollo local
+      const initSocket = async () => {
+        try {
+          // Inicializar servidor Socket.io
+          await fetch('/api/socket.io', { method: 'GET' })
+          
+          // Conectar cliente
+          const newSocket = io({
+            autoConnect: true,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
           })
-        })
 
-        newSocket.on('disconnect', () => {
-          console.log('❌ Desconectado del servidor')
-          toast.warn('Conexión perdida - Intentando reconectar...', {
-            position: 'bottom-right',
-            autoClose: 3000,
+          newSocket.on('connect', () => {
+            console.log('✅ Conectado al servidor en tiempo real')
+            toast.success('Conectado - Actualizaciones en tiempo real activas', {
+              position: 'bottom-right',
+              autoClose: 2000,
+            })
           })
-        })
 
-        newSocket.on('reconnect', () => {
-          console.log('🔄 Reconectado al servidor')
-          toast.success('Reconectado - Actualizaciones en tiempo real activas', {
-            position: 'bottom-right',
-            autoClose: 2000,
+          newSocket.on('disconnect', () => {
+            console.log('❌ Desconectado del servidor')
+            toast.warn('Conexión perdida - Intentando reconectar...', {
+              position: 'bottom-right',
+              autoClose: 3000,
+            })
           })
-          cargarAsistentes() // Recargar datos tras reconexión
-        })
+
+          newSocket.on('reconnect', () => {
+            console.log('🔄 Reconectado al servidor')
+            toast.success('Reconectado - Actualizaciones en tiempo real activas', {
+              position: 'bottom-right',
+              autoClose: 2000,
+            })
+            cargarAsistentes() // Recargar datos tras reconexión
+          })
 
         // Actualizaciones en tiempo real de asistentes
         newSocket.on('asistente-actualizado', (asistente: Asistente) => {
@@ -201,15 +212,17 @@ export default function Home() {
           })
         })
 
-        setSocket(newSocket)
-        
-      } catch (error) {
-        console.error('Error iniciando Socket.io:', error)
-        toast.error('Error conectando tiempo real')
+          setSocket(newSocket)
+          
+        } catch (error) {
+          console.error('Error iniciando Socket.io:', error)
+          toast.error('Error conectando tiempo real')
+        }
       }
+
+      initSocket()
     }
 
-    initSocket()
     cargarAsistentes()
 
     return () => {

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Optimizaciones para Vercel
-  output: 'standalone',
+  // Configuración para Vercel - eliminar output standalone que causa problemas
+  // output: 'standalone', // Comentado para Vercel
   
   // Configuración de headers para Socket.io
   async headers() {
@@ -49,10 +49,10 @@ const nextConfig = {
       : 'http://localhost:3000'
   },
 
-  // Configuración experimental para mejor rendimiento
+  // Configuración experimental más conservadora para Vercel
   experimental: {
-    // Optimización del bundle
-    optimizeCss: true,
+    // Remover optimizeCss que puede causar problemas con critters
+    // optimizeCss: true, // Comentado para evitar errores con critters
     // Mejor manejo de Server Components
     serverComponentsExternalPackages: ['googleapis']
   }
