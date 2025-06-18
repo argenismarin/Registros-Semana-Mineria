@@ -19,67 +19,74 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const streamRef = useRef<MediaStream | null>(null)
   const scanningRef = useRef<boolean>(false)
   const animationRef = useRef<number | null>(null)
+  const initTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Limpiar recursos al desmontar
   useEffect(() => {
     return () => {
-      stopCamera()
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
+      cleanup()
     }
   }, [])
 
-  const stopCamera = useCallback(() => {
+  const cleanup = useCallback(() => {
+    // Limpiar timeout
+    if (initTimeoutRef.current) {
+      clearTimeout(initTimeoutRef.current)
+      initTimeoutRef.current = null
+    }
+
+    // Detener stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => {
         track.stop()
       })
       streamRef.current = null
     }
-    scanningRef.current = false
-    setIsScanning(false)
+
+    // Cancelar animación
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current)
       animationRef.current = null
     }
+
+    scanningRef.current = false
+    setIsScanning(false)
   }, [])
 
   const startCamera = useCallback(async () => {
     try {
+      console.log('🎥 Iniciando cámara...')
       setIsLoading(true)
       setError(null)
       
-      // Detener cámara anterior si existe
-      stopCamera()
+      // Limpiar recursos anteriores
+      cleanup()
       
       // Verificar soporte
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('getUserMedia no soportado')
       }
 
-      // Configuración progresiva para máxima compatibilidad
+      // Configuraciones progresivas
       const constraints = [
-        // Intento 1: Configuración ideal
+        // Configuración básica para móviles
         {
           video: {
             facingMode: 'environment',
-            width: { ideal: 640, max: 1280 },
-            height: { ideal: 480, max: 720 },
-            frameRate: { ideal: 30, max: 30 }
+            width: { ideal: 640 },
+            height: { ideal: 480 }
           },
           audio: false
         },
-        // Intento 2: Configuración básica
+        // Configuración fallback
         {
           video: {
-            facingMode: 'environment',
-            width: 320,
-            height: 240
+            width: { ideal: 320 },
+            height: { ideal: 240 }
           },
           audio: false
         },
-        // Intento 3: Solo video sin restricciones
+        // Último recurso
         {
           video: true,
           audio: false
@@ -91,11 +98,13 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
 
       for (const constraint of constraints) {
         try {
+          console.log('🔄 Probando constraint:', constraint)
           stream = await navigator.mediaDevices.getUserMedia(constraint)
+          console.log('✅ Stream obtenido exitosamente')
           break
         } catch (err) {
           lastError = err as Error
-          console.warn('Fallo constraint:', constraint, err)
+          console.warn('❌ Fallo constraint:', err)
         }
       }
 
@@ -107,47 +116,89 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       setHasPermission(true)
 
       if (videoRef.current) {
-        // Configurar video para móviles
         const video = videoRef.current
-        video.srcObject = stream
         
-        // Atributos críticos para móviles
+        // Limpiar listeners anteriores
+        video.onloadedmetadata = null
+        video.oncanplay = null
+        video.onerror = null
+
+        // Configurar video
+        video.srcObject = stream
         video.setAttribute('playsinline', 'true')
         video.setAttribute('muted', 'true')
         video.setAttribute('autoplay', 'true')
         video.style.objectFit = 'cover'
         
-        // Manejar la carga del video
-        const handleLoadedMetadata = () => {
-          setIsLoading(false)
-          startScanning()
-        }
+        // Promesa para manejar la inicialización
+        const initializeVideo = () => {
+          return new Promise<void>((resolve, reject) => {
+            let resolved = false
 
-        const handleCanPlay = () => {
-          setIsLoading(false)
-          startScanning()
-        }
+            const handleSuccess = () => {
+              if (resolved) return
+              resolved = true
+              console.log('✅ Video inicializado correctamente')
+              setIsLoading(false)
+              setTimeout(() => startScanning(), 100)
+              resolve()
+            }
 
-        video.addEventListener('loadedmetadata', handleLoadedMetadata)
-        video.addEventListener('canplay', handleCanPlay)
+            const handleError = (error: any) => {
+              if (resolved) return
+              resolved = true
+              console.error('❌ Error inicializando video:', error)
+              reject(error)
+            }
+
+            // Event listeners
+            video.onloadedmetadata = () => {
+              console.log('📹 Metadata cargada')
+              if (video.videoWidth > 0 && video.videoHeight > 0) {
+                handleSuccess()
+              }
+            }
+
+            video.oncanplay = () => {
+              console.log('▶️ Video listo para reproducir')
+              handleSuccess()
+            }
+
+            video.onerror = (error) => {
+              console.error('❌ Error en video:', error)
+              handleError(error)
+            }
+
+            // Timeout de seguridad
+            initTimeoutRef.current = setTimeout(() => {
+              if (!resolved) {
+                console.log('⏰ Timeout - forzando inicialización')
+                if (video.videoWidth > 0 && video.videoHeight > 0) {
+                  handleSuccess()
+                } else {
+                  handleError(new Error('Timeout inicializando video'))
+                }
+              }
+            }, 5000)
+          })
+        }
 
         // Intentar reproducir
         try {
-          await video.play()
+          const playPromise = video.play()
+          if (playPromise) {
+            await playPromise
+            console.log('▶️ Video reproduciéndose')
+          }
         } catch (playError) {
-          console.warn('Error en play:', playError)
-          // Intentar de nuevo después de un delay
-          setTimeout(async () => {
-            try {
-              await video.play()
-            } catch (retryError) {
-              console.error('Error en retry play:', retryError)
-            }
-          }, 100)
+          console.warn('⚠️ Error en play inicial:', playError)
         }
+
+        // Esperar inicialización
+        await initializeVideo()
       }
     } catch (error) {
-      console.error('Error iniciando cámara:', error)
+      console.error('❌ Error iniciando cámara:', error)
       setHasPermission(false)
       setIsLoading(false)
       
@@ -176,24 +227,33 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       setError(errorMessage)
       toast.error(errorMessage)
     }
-  }, [stopCamera])
+  }, [cleanup])
 
   const startScanning = useCallback(() => {
     if (scanningRef.current || !videoRef.current || !canvasRef.current) {
+      console.log('⚠️ No se puede iniciar escaneo - condiciones no cumplidas')
       return
     }
-
-    scanningRef.current = true
-    setIsScanning(true)
 
     const video = videoRef.current
     const canvas = canvasRef.current
     const context = canvas.getContext('2d')
 
     if (!context) {
-      console.error('No se pudo obtener contexto 2D')
+      console.error('❌ No se pudo obtener contexto 2D')
       return
     }
+
+    // Verificar que el video esté listo
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log('⏳ Video no listo, reintentando en 100ms...')
+      setTimeout(() => startScanning(), 100)
+      return
+    }
+
+    scanningRef.current = true
+    setIsScanning(true)
+    console.log('🔍 Iniciando escaneo de QR')
 
     const scanFrame = () => {
       if (!scanningRef.current || !video.videoWidth || !video.videoHeight) {
@@ -204,11 +264,11 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       }
 
       try {
-        // Ajustar canvas al tamaño del video
+        // Ajustar canvas
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
         
-        // Dibujar frame actual
+        // Dibujar frame
         context.drawImage(video, 0, 0, canvas.width, canvas.height)
         
         // Obtener datos de imagen
@@ -220,15 +280,15 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         })
         
         if (qrCode) {
-          console.log('QR detectado:', qrCode.data)
+          console.log('🎯 QR detectado:', qrCode.data)
           scanningRef.current = false
           setIsScanning(false)
-          stopCamera()
+          cleanup()
           onScan(qrCode.data)
           return
         }
       } catch (error) {
-        console.warn('Error en frame de escaneo:', error)
+        console.warn('⚠️ Error en frame de escaneo:', error)
       }
 
       // Continuar escaneando
@@ -239,7 +299,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     // Iniciar escaneo
     animationRef.current = requestAnimationFrame(scanFrame)
-  }, [onScan, stopCamera])
+  }, [onScan, cleanup])
 
   // Inicializar cámara al montar
   useEffect(() => {
@@ -249,20 +309,23 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const handleManualInput = () => {
     const qrData = prompt('Ingresa el código QR manualmente:')
     if (qrData?.trim()) {
-      stopCamera()
+      cleanup()
       onScan(qrData.trim())
     }
   }
 
   const handleRestart = () => {
-    stopCamera()
+    console.log('🔄 Reiniciando cámara...')
+    cleanup()
     setHasPermission(null)
     setError(null)
-    startCamera()
+    setIsLoading(true)
+    setTimeout(() => startCamera(), 100)
   }
 
   const handleClose = () => {
-    stopCamera()
+    console.log('❌ Cerrando escáner...')
+    cleanup()
     if (onClose) {
       onClose()
     }
@@ -275,13 +338,24 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         <div className="bg-white rounded-lg p-6 max-w-sm mx-4 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <h3 className="text-lg font-semibold mb-2">Iniciando cámara...</h3>
-          <p className="text-gray-600 text-sm">Por favor permite el acceso cuando se solicite</p>
-          <button
-            onClick={handleClose}
-            className="mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm"
-          >
-            Cancelar
-          </button>
+          <p className="text-gray-600 text-sm mb-4">Por favor permite el acceso cuando se solicite</p>
+          <div className="text-xs text-gray-500 mb-4">
+            Si toma demasiado tiempo, prueba el botón Reintentar
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRestart}
+              className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
+            >
+              🔄 Reintentar
+            </button>
+            <button
+              onClick={handleClose}
+              className="flex-1 px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm"
+            >
+              Cancelar
+            </button>
+          </div>
         </div>
       </div>
     )
