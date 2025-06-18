@@ -84,67 +84,36 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         video.playsInline = true
         video.autoplay = true
 
-        // Función simple que progresa SIEMPRE
-        const progressToScanning = () => {
-          console.log('🎬 Progresando a escaneo...')
+        // Función que progresa directamente
+        const forceProgress = () => {
+          console.log('🚀 Forzando progreso a interfaz de escaneo...')
           setIsLoading(false)
-          // Dar un momento para que se renderice la UI y luego empezar
           setTimeout(() => {
             startScanning()
-          }, 100)
+          }, 200)
         }
 
-        // Eventos múltiples pero que progresan de todas formas
-        let progressTriggered = false
-
-        const triggerProgress = () => {
-          if (!progressTriggered) {
-            progressTriggered = true
-            progressToScanning()
-          }
-        }
-
-        video.onloadedmetadata = () => {
-          console.log('📊 Metadata cargada')
-          triggerProgress()
-        }
-
-        video.oncanplay = () => {
-          console.log('▶️ Video puede reproducirse')
-          triggerProgress()
-        }
-
-        // Intentar play
+        // Intentar play y progresar inmediatamente
         try {
           await video.play()
           console.log('🎵 Video reproduciéndose')
           
-          // Si play fue exitoso, progresar después de un momento
-          setTimeout(() => {
-            if (!progressTriggered) {
-              console.log('⏰ Timeout - forzando progreso después de play exitoso')
-              triggerProgress()
-            }
-          }, 1000)
+          // Progresar inmediatamente después de play exitoso
+          setTimeout(forceProgress, 500)
           
         } catch (playError) {
           console.warn('⚠️ Error en play:', playError)
-          // Aún así progresar - el video puede funcionar
-          setTimeout(() => {
-            if (!progressTriggered) {
-              console.log('⏰ Timeout - forzando progreso a pesar del error de play')
-              triggerProgress()
-            }
-          }, 1500)
+          // Progresar aunque haya error de play
+          setTimeout(forceProgress, 800)
         }
 
-        // Timeout de seguridad - SIEMPRE progresa después de 3 segundos
+        // Backup: progreso garantizado en 1 segundo
         setTimeout(() => {
-          if (!progressTriggered) {
-            console.log('🚨 Timeout de seguridad - forzando progreso')
-            triggerProgress()
+          if (isLoading) {
+            console.log('⏰ Backup timeout - forzando progreso')
+            forceProgress()
           }
-        }, 3000)
+        }, 1000)
       }
 
     } catch (error) {
@@ -174,9 +143,9 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       setError(errorMessage)
       toast.error(errorMessage)
     }
-  }, [cleanup])
+  }, [cleanup, isLoading])
 
-  // Función para iniciar escaneo (más tolerante)
+  // Función para iniciar escaneo
   const startScanning = useCallback(() => {
     console.log('🔍 === INICIANDO ESCANEO ===')
     
@@ -186,7 +155,8 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     }
 
     if (!videoRef.current || !canvasRef.current) {
-      console.log('❌ Referencias no disponibles')
+      console.log('❌ Referencias no disponibles, reintentando...')
+      setTimeout(() => startScanning(), 500)
       return
     }
 
@@ -207,7 +177,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
       if (!scanningRef.current) return
 
       try {
-        // Solo intentar si hay dimensiones válidas, sino saltar este frame
+        // Solo procesar si el video tiene dimensiones
         if (video.videoWidth > 0 && video.videoHeight > 0) {
           canvas.width = video.videoWidth
           canvas.height = video.videoHeight
@@ -224,10 +194,8 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             onScan(qrCode.data)
             return
           }
-        } else {
-          // Video aún sin dimensiones, pero continuar intentando
-          // console.log('⏳ Video sin dimensiones aún...')
         }
+        // Si no hay dimensiones, continuar intentando
       } catch (error) {
         console.warn('⚠️ Error en frame:', error)
       }
@@ -285,7 +253,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
           </p>
           
           <div className="text-xs text-gray-500 mb-4">
-            Se forzará el progreso en máximo 3 segundos
+            Progresa automáticamente en 1 segundo
           </div>
           
           <div className="flex gap-2">
@@ -398,7 +366,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         {/* Estado */}
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2">
           <div className="bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
-            {isScanning ? '🔍 Escaneando...' : '⏸️ Iniciando...'}
+            {isScanning ? '🔍 Escaneando...' : '⏸️ Preparando...'}
           </div>
         </div>
       </div>
