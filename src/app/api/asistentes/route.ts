@@ -19,14 +19,16 @@ async function sincronizarConGoogleSheets(asistente: Asistente) {
 
 export async function GET() {
   try {
-    // Intentar sincronizar con Google Sheets primero
+    // En Vercel (serverless), priorizar Google Sheets como fuente de verdad
     if (googleSheetsService.isConfigured()) {
       try {
-        const memoryAsistentes = db.getAsistentes()
-        const syncedAsistentes = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
+        console.log('🔄 Cargando asistentes desde Google Sheets (modo serverless)')
         
-        // Actualizar base de datos en memoria con datos sincronizados
-        syncedAsistentes.forEach(asistente => {
+        // Leer directamente desde Google Sheets
+        const sheetsAsistentes = await googleSheetsService.getAsistentes()
+        
+        // Actualizar memoria local para esta ejecución lambda
+        sheetsAsistentes.forEach(asistente => {
           const existing = db.findAsistenteById(asistente.id)
           if (!existing) {
             db.addAsistente(asistente)
@@ -35,16 +37,35 @@ export async function GET() {
           }
         })
         
-        return NextResponse.json(syncedAsistentes)
+        console.log(`✅ ${sheetsAsistentes.length} asistentes cargados desde Google Sheets`)
+        return NextResponse.json(sheetsAsistentes)
+        
       } catch (sheetsError) {
-        console.error('Error sincronizando con Google Sheets:', sheetsError)
-        // Fallback a datos en memoria
+        console.error('❌ Error cargando desde Google Sheets:', sheetsError)
+        
+        // Fallback a memoria local (probablemente vacía en serverless)
+        const memoryAsistentes = db.getAsistentes()
+        console.log(`⚠️ Fallback: ${memoryAsistentes.length} asistentes en memoria local`)
+        
+        return NextResponse.json({
+          asistentes: memoryAsistentes,
+          warning: 'Google Sheets no disponible, datos limitados',
+          error: sheetsError instanceof Error ? sheetsError.message : 'Error de conexión'
+        })
       }
     }
     
+    // Si Google Sheets no está configurado
     const asistentes = db.getAsistentes()
-    return NextResponse.json(asistentes)
+    console.log(`📝 Solo memoria local: ${asistentes.length} asistentes`)
+    
+    return NextResponse.json({
+      asistentes,
+      warning: 'Google Sheets no configurado - solo datos locales'
+    })
+    
   } catch (error) {
+    console.error('❌ Error general:', error)
     return NextResponse.json(
       { error: 'Error obteniendo asistentes' },
       { status: 500 }

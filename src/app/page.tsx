@@ -53,9 +53,24 @@ export default function Home() {
     try {
       const response = await fetch('/api/asistentes')
       const data = await response.json()
-      setAsistentes(data)
+      
+      // Manejar respuestas con estructura de diagnóstico
+      if (data.asistentes) {
+        setAsistentes(data.asistentes)
+        if (data.warning) {
+          toast.warning(data.warning, { autoClose: 5000 })
+        }
+        if (data.error) {
+          console.error('Error de Google Sheets:', data.error)
+        }
+      } else {
+        // Respuesta directa (array de asistentes)
+        setAsistentes(data)
+      }
+      
     } catch (error) {
       toast.error('Error cargando asistentes')
+      console.error('Error:', error)
     } finally {
       setLoading(false)
     }
