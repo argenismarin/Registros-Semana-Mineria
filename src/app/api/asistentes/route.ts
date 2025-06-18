@@ -75,7 +75,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('📝 POST /api/asistentes - Creando nuevo asistente')
     const body = await request.json()
+    console.log('📄 Datos recibidos:', body)
     
     const nuevoAsistente: Asistente = {
       id: uuidv4(),
@@ -89,25 +91,39 @@ export async function POST(request: NextRequest) {
       horaLlegada: undefined
     }
 
+    console.log('👤 Nuevo asistente creado:', nuevoAsistente)
+
+    // Agregar a memoria local primero
     db.addAsistente(nuevoAsistente)
+    console.log('✅ Asistente agregado a memoria local')
     
-    // Sincronizar con Google Sheets
-    await sincronizarConGoogleSheets(nuevoAsistente)
+    // Sincronizar con Google Sheets (no bloquear la respuesta)
+    sincronizarConGoogleSheets(nuevoAsistente).catch(error => {
+      console.error('⚠️ Error sincronizando con Google Sheets (no crítico):', error)
+    })
     
-    // Notificar a otros clientes vía Socket.io
-    await fetch('/api/socket.io', {
+    // Notificar a otros clientes vía Socket.io (no bloquear la respuesta)
+    fetch('/api/socket.io', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         event: 'nuevo-asistente',
         data: nuevoAsistente
       })
+    }).catch(error => {
+      console.error('⚠️ Error notificando via socket (no crítico):', error)
     })
 
+    console.log('🎉 Asistente creado exitosamente')
     return NextResponse.json(nuevoAsistente, { status: 201 })
+    
   } catch (error) {
+    console.error('❌ Error creando asistente:', error)
     return NextResponse.json(
-      { error: 'Error creando asistente' },
+      { 
+        error: 'Error creando asistente',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
       { status: 500 }
     )
   }

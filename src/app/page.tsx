@@ -6,6 +6,7 @@ import RegistroForm from '@/components/RegistroForm'
 import ListaAsistentes from '@/components/ListaAsistentes'
 import EscarapelaPreview from '@/components/EscarapelaPreview'
 import QRScanner from '@/components/QRScanner'
+import Link from 'next/link'
 
 
 
@@ -51,26 +52,50 @@ export default function Home() {
   const cargarAsistentes = async () => {
     setLoading(true)
     try {
+      console.log('🔄 Cargando asistentes...')
       const response = await fetch('/api/asistentes')
+      console.log('📡 Response status:', response.status)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
+      console.log('📊 Datos recibidos:', data)
       
       // Manejar respuestas con estructura de diagnóstico
       if (data.asistentes) {
         setAsistentes(data.asistentes)
+        console.log(`✅ ${data.asistentes.length} asistentes cargados`)
         if (data.warning) {
           toast.warning(data.warning, { autoClose: 5000 })
         }
         if (data.error) {
           console.error('Error de Google Sheets:', data.error)
+          toast.error(`Problema con Google Sheets: ${data.error}`, { autoClose: 5000 })
         }
       } else {
         // Respuesta directa (array de asistentes)
         setAsistentes(data)
+        console.log(`✅ ${data.length} asistentes cargados directamente`)
       }
       
     } catch (error) {
-      toast.error('Error cargando asistentes')
-      console.error('Error:', error)
+      console.error('❌ Error cargando asistentes:', error)
+      toast.error(`Error cargando asistentes: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // En caso de error, intentar cargar desde diagnóstico
+      try {
+        console.log('🔧 Intentando diagnóstico como fallback...')
+        const diagResponse = await fetch('/api/diagnostico')
+        const diagData = await diagResponse.json()
+        
+        if (diagData.googleSheets?.totalAsistentes > 0) {
+          toast.info(`Se detectaron ${diagData.googleSheets.totalAsistentes} asistentes en Google Sheets. Intenta recargar la página.`)
+        }
+      } catch (diagError) {
+        console.error('❌ Error en diagnóstico:', diagError)
+      }
     } finally {
       setLoading(false)
     }
@@ -249,6 +274,8 @@ export default function Home() {
 
   const agregarAsistente = async (nuevoAsistente: Omit<Asistente, 'id' | 'presente' | 'escarapelaImpresa' | 'fechaRegistro' | 'fechaImpresion' | 'qrGenerado' | 'fechaGeneracionQR'>) => {
     try {
+      console.log('➕ Agregando asistente:', nuevoAsistente)
+      
       const response = await fetch('/api/asistentes', {
         method: 'POST',
         headers: {
@@ -256,14 +283,32 @@ export default function Home() {
         },
         body: JSON.stringify(nuevoAsistente),
       })
+      
+      console.log('📡 Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+      }
+      
       const asistente = await response.json()
+      console.log('✅ Asistente creado:', asistente)
+      
+      // Actualizar lista inmediatamente
+      setAsistentes(prev => [...prev, asistente])
       
       // Notificar a otros clientes
       notificarEvento('nuevo-asistente', asistente)
       
       toast.success(`${asistente.nombre} registrado exitosamente`)
+      
     } catch (error) {
-      toast.error('Error registrando asistente')
+      console.error('❌ Error registrando asistente:', error)
+      toast.error(`Error registrando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // Recargar lista como fallback
+      console.log('🔄 Recargando lista como fallback...')
+      cargarAsistentes()
     }
   }
 
@@ -372,36 +417,42 @@ export default function Home() {
             </div>
             
             <div className="flex gap-2 mt-4 sm:mt-0">
-              <a
+              <Link
                 href="/importar"
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition text-sm"
               >
                 📁 Importar
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/qr-masivo"
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition text-sm"
               >
                 📱 QR Masivo
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/reportes"
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition text-sm"
               >
                 📊 Reportes
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/evento"
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition text-sm"
               >
                 🎉 Evento
-              </a>
-              <a
-                href="/test-qr"
+              </Link>
+              <Link
+                href="/configuracion"
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition text-sm"
+              >
+                ⚙️ Configuración
+              </Link>
+              <Link
+                href="/test-qr-scanner"
                 className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition text-sm"
               >
                 🧪 Test QR
-              </a>
+              </Link>
             </div>
           </div>
         </div>
