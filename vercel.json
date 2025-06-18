@@ -1,7 +1,15 @@
 {
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
+  },
+  "build": {
+    "env": {
+      "ENABLE_EXPERIMENTAL_COREPACK": "1"
+    }
+  },
+  "env": {
+    "NODE_OPTIONS": "--max-old-space-size=1024"
   }
 } 
