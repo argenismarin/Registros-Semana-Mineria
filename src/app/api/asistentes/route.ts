@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
-import db, { type Asistente } from '@/lib/database'
+import db, { type Asistente, inicializarDatosPrueba } from '@/lib/database'
 import googleSheetsService from '@/lib/googleSheets'
+
+// Inicializar datos de prueba si la base de datos está vacía
+let datosInicializados = false
+
+function asegurarDatosPrueba() {
+  if (!datosInicializados && db.getAsistentes().length === 0) {
+    console.log('🔄 Base de datos vacía, inicializando datos de prueba...')
+    inicializarDatosPrueba()
+    datosInicializados = true
+  }
+}
 
 // Sincronización con Google Sheets
 async function sincronizarConGoogleSheets(asistente: Asistente) {
@@ -19,21 +30,22 @@ async function sincronizarConGoogleSheets(asistente: Asistente) {
 
 export async function GET() {
   try {
-    // En Vercel (serverless), priorizar Google Sheets como fuente de verdad
+    console.log('🔄 GET /api/asistentes - Obteniendo lista de asistentes')
+    
+    // Asegurar que hay datos de prueba
+    asegurarDatosPrueba()
+    
+    // Intentar cargar desde Google Sheets si está configurado
     if (googleSheetsService.isConfigured()) {
       try {
-        console.log('🔄 Cargando asistentes desde Google Sheets (modo serverless)')
-        
-        // Leer directamente desde Google Sheets
+        console.log('📊 Cargando desde Google Sheets...')
         const sheetsAsistentes = await googleSheetsService.getAsistentes()
         
-        // Actualizar memoria local para esta ejecución lambda
+        // Sincronizar con memoria local
         sheetsAsistentes.forEach(asistente => {
           const existing = db.findAsistenteById(asistente.id)
           if (!existing) {
             db.addAsistente(asistente)
-          } else {
-            db.updateAsistente(asistente.id, asistente)
           }
         })
         
@@ -42,30 +54,17 @@ export async function GET() {
         
       } catch (sheetsError) {
         console.error('❌ Error cargando desde Google Sheets:', sheetsError)
-        
-        // Fallback a memoria local (probablemente vacía en serverless)
-        const memoryAsistentes = db.getAsistentes()
-        console.log(`⚠️ Fallback: ${memoryAsistentes.length} asistentes en memoria local`)
-        
-        return NextResponse.json({
-          asistentes: memoryAsistentes,
-          warning: 'Google Sheets no disponible, datos limitados',
-          error: sheetsError instanceof Error ? sheetsError.message : 'Error de conexión'
-        })
       }
     }
     
-    // Si Google Sheets no está configurado
+    // Fallback a memoria local
     const asistentes = db.getAsistentes()
-    console.log(`📝 Solo memoria local: ${asistentes.length} asistentes`)
+    console.log(`📝 Retornando ${asistentes.length} asistentes de memoria local`)
     
-    return NextResponse.json({
-      asistentes,
-      warning: 'Google Sheets no configurado - solo datos locales'
-    })
+    return NextResponse.json(asistentes)
     
   } catch (error) {
-    console.error('❌ Error general:', error)
+    console.error('❌ Error en GET /api/asistentes:', error)
     return NextResponse.json(
       { error: 'Error obteniendo asistentes' },
       { status: 500 }
@@ -75,55 +74,63 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 POST /api/asistentes - Creando nuevo asistente')
-    const body = await request.json()
-    console.log('📄 Datos recibidos:', body)
+    console.log('➕ POST /api/asistentes - Creando nuevo asistente')
     
+    const body = await request.json()
+    
+    // Validar datos requeridos
+    if (!body.nombre || body.nombre.trim() === '') {
+      return NextResponse.json(
+        { error: 'El nombre es requerido' },
+        { status: 400 }
+      )
+    }
+
+    // Validar email si se proporciona
+    if (body.email && body.email.trim() !== '') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(body.email.trim())) {
+        return NextResponse.json(
+          { error: 'El email no tiene un formato válido' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Crear nuevo asistente
     const nuevoAsistente: Asistente = {
       id: uuidv4(),
-      nombre: body.nombre,
-      email: body.email || '',
-      cargo: body.cargo || '',
-      empresa: body.empresa || '',
+      nombre: body.nombre.trim(),
+      email: body.email?.trim() || '',
+      cargo: body.cargo?.trim() || '',
+      empresa: body.empresa?.trim() || '',
       presente: false,
       escarapelaImpresa: false,
       fechaRegistro: new Date().toISOString(),
-      horaLlegada: undefined
+      qrGenerado: false
     }
 
-    console.log('👤 Nuevo asistente creado:', nuevoAsistente)
-
-    // Agregar a memoria local primero
+    // Agregar a base de datos local
     db.addAsistente(nuevoAsistente)
-    console.log('✅ Asistente agregado a memoria local')
-    
-    // Sincronizar con Google Sheets (no bloquear la respuesta)
-    sincronizarConGoogleSheets(nuevoAsistente).catch(error => {
-      console.error('⚠️ Error sincronizando con Google Sheets (no crítico):', error)
-    })
-    
-    // Notificar a otros clientes vía Socket.io (no bloquear la respuesta)
-    fetch('/api/socket.io', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'nuevo-asistente',
-        data: nuevoAsistente
-      })
-    }).catch(error => {
-      console.error('⚠️ Error notificando via socket (no crítico):', error)
-    })
 
-    console.log('🎉 Asistente creado exitosamente')
+    // Sincronizar con Google Sheets si está configurado
+    if (googleSheetsService.isConfigured()) {
+      try {
+        await googleSheetsService.addAsistente(nuevoAsistente)
+        console.log('📊 Asistente sincronizado con Google Sheets')
+      } catch (error) {
+        console.error('⚠️ Error sincronizando con Google Sheets:', error)
+      }
+    }
+
+    console.log(`✅ Asistente ${nuevoAsistente.nombre} creado exitosamente`)
+
     return NextResponse.json(nuevoAsistente, { status: 201 })
-    
+
   } catch (error) {
-    console.error('❌ Error creando asistente:', error)
+    console.error('❌ Error en POST /api/asistentes:', error)
     return NextResponse.json(
-      { 
-        error: 'Error creando asistente',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
+      { error: 'Error creando asistente' },
       { status: 500 }
     )
   }

@@ -1,14 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'react-toastify'
 import RegistroForm from '@/components/RegistroForm'
 import ListaAsistentes from '@/components/ListaAsistentes'
-import EscarapelaPreview from '@/components/EscarapelaPreview'
 import QRScanner from '@/components/QRScanner'
 import Link from 'next/link'
-
-
 
 interface Asistente {
   id: string
@@ -27,513 +24,550 @@ interface Asistente {
 
 export default function Home() {
   const [asistentes, setAsistentes] = useState<Asistente[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [mostrarCamara, setMostrarCamara] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
-  const [mostrarQRScanner, setMostrarQRScanner] = useState(false)
+  
+  // Estados para tiempo real
+  const [clienteId] = useState(`cliente-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  const [estadoSincronizacion, setEstadoSincronizacion] = useState<'sincronizado' | 'sincronizando' | 'error'>('sincronizado')
+  const intervalRef = useRef<NodeJS.Timeout>()
+  const isUpdatingRef = useRef(false)
 
-  useEffect(() => {
-    // En entorno Vercel (serverless), no usar tiempo real
-    console.log('🌐 Modo serverless - Sin tiempo real')
-    toast.info('🌐 Aplicación cargada (modo serverless)', {
-      position: 'bottom-right',
-      autoClose: 2000,
+  // Configuración
+  const INTERVALO_POLLING = 30000 // 30 segundos para reducir carga
+  const TIMEOUT_OPERACION = 10000 // 10 segundos
+
+  const asistentesFiltrados = asistentes.filter(asistente => {
+    const coincideFiltro = !filtro || 
+      asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
+      (asistente.email && asistente.email.toLowerCase().includes(filtro.toLowerCase())) ||
+      (asistente.cargo && asistente.cargo.toLowerCase().includes(filtro.toLowerCase())) ||
+      (asistente.empresa && asistente.empresa.toLowerCase().includes(filtro.toLowerCase()))
+    
+    const coincidePendiente = !mostrarSoloPendientes || !asistente.presente
+    
+    return coincideFiltro && coincidePendiente
+  })
+
+  // Función helper para operaciones con timeout
+  const ejecutarConTimeout = async (
+    operacion: () => Promise<Response>,
+    mensajeError: string
+  ): Promise<Response> => {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Timeout: ${mensajeError}`))
+      }, TIMEOUT_OPERACION)
+
+      operacion()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => clearTimeout(timeout))
     })
-
-    cargarAsistentes()
-  }, [])
-
-  // Función para notificar eventos (simplificada para Vercel)
-  const notificarEvento = (evento: string, data: any) => {
-    // En modo serverless, solo hacer log del evento
-    console.log(`📡 Evento: ${evento}`, data)
   }
 
-  const cargarAsistentes = async () => {
-    setLoading(true)
+  // Cargar asistentes simplificado
+  const cargarAsistentes = useCallback(async (forzarCarga = false) => {
+    if (isUpdatingRef.current && !forzarCarga) {
+      console.log('⏭️ Omitiendo carga, operación en progreso')
+      return
+    }
+
     try {
+      setEstadoSincronizacion('sincronizando')
+      
       console.log('🔄 Cargando asistentes...')
-      const response = await fetch('/api/asistentes')
-      console.log('📡 Response status:', response.status)
+      const response = await fetch('/api/asistentes', {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'X-Cliente-ID': clienteId
+        }
+      })
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP ${response.status}`)
       }
       
-      const data = await response.json()
-      console.log('📊 Datos recibidos:', data)
+      const data: Asistente[] = await response.json()
+      console.log(`✅ ${data.length} asistentes cargados`)
       
-      // Manejar respuestas con estructura de diagnóstico
-      if (data.asistentes) {
-        setAsistentes(data.asistentes)
-        console.log(`✅ ${data.asistentes.length} asistentes cargados`)
-        if (data.warning) {
-          toast.warning(data.warning, { autoClose: 5000 })
-        }
-        if (data.error) {
-          console.error('Error de Google Sheets:', data.error)
-          toast.error(`Problema con Google Sheets: ${data.error}`, { autoClose: 5000 })
-        }
-      } else {
-        // Respuesta directa (array de asistentes)
-        setAsistentes(data)
-        console.log(`✅ ${data.length} asistentes cargados directamente`)
-      }
+      setAsistentes(data)
+      setEstadoSincronizacion('sincronizado')
       
     } catch (error) {
       console.error('❌ Error cargando asistentes:', error)
-      toast.error(`Error cargando asistentes: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      setEstadoSincronizacion('error')
       
-      // En caso de error, intentar cargar desde diagnóstico
-      try {
-        console.log('🔧 Intentando diagnóstico como fallback...')
-        const diagResponse = await fetch('/api/diagnostico')
-        const diagData = await diagResponse.json()
-        
-        if (diagData.googleSheets?.totalAsistentes > 0) {
-          toast.info(`Se detectaron ${diagData.googleSheets.totalAsistentes} asistentes en Google Sheets. Intenta recargar la página.`)
-        }
-      } catch (diagError) {
-        console.error('❌ Error en diagnóstico:', diagError)
+      if (loading) {
+        toast.error('Error cargando datos. Reintentando...')
       }
     } finally {
       setLoading(false)
     }
-  }
+  }, [loading, clienteId])
+
+  // Configurar polling para tiempo real
+  useEffect(() => {
+    // Carga inicial
+    cargarAsistentes(true)
+
+    // Configurar polling
+    intervalRef.current = setInterval(() => {
+      cargarAsistentes()
+    }, INTERVALO_POLLING)
+
+    // Limpiar intervalo al desmontar
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, []) // Solo en mount
 
   const marcarAsistencia = async (id: string) => {
+    if (isUpdatingRef.current) {
+      toast.warning('Operación en progreso, espera...')
+      return
+    }
+
     try {
-      const response = await fetch(`/api/asistentes/${id}/asistencia`, {
-        method: 'POST',
-      })
-      const asistente = await response.json()
+      isUpdatingRef.current = true
+      console.log('✅ Marcando asistencia para:', id)
       
-      // Notificar a otros clientes
-      notificarEvento('asistencia-marcada', { 
-        asistente, 
-        device: 'Manual' 
-      })
+      const response = await ejecutarConTimeout(
+        () => fetch(`/api/asistentes/${id}/asistencia`, {
+          method: 'POST',
+          headers: {
+            'X-Cliente-ID': clienteId
+          }
+        }),
+        'Marcar asistencia'
+      )
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+      
+      const resultado = await response.json()
+      
+      if (resultado.success && resultado.asistente) {
+        // Actualización optimista
+        setAsistentes(prev => 
+          prev.map(a => a.id === id ? resultado.asistente : a)
+        )
+        
+        toast.success(`✅ ${resultado.asistente.nombre} marcado como presente`)
+        
+        // Programar recarga
+        setTimeout(() => cargarAsistentes(), 500)
+      } else {
+        throw new Error(resultado.error || 'Respuesta inválida del servidor')
+      }
       
     } catch (error) {
-      toast.error('Error marcando asistencia')
+      console.error('❌ Error marcando asistencia:', error)
+      toast.error(`Error marcando asistencia: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // Recargar como fallback
+      cargarAsistentes(true)
+    } finally {
+      isUpdatingRef.current = false
     }
   }
 
   const imprimirEscarapela = async (asistente: Asistente) => {
+    if (isUpdatingRef.current) {
+      toast.warning('Operación en progreso, espera...')
+      return
+    }
+
     try {
-      // Marcar como impresa en la base de datos
-      await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
-        method: 'POST',
-      })
+      isUpdatingRef.current = true
+      console.log('🖨️ Imprimiendo escarapela para:', asistente.nombre)
 
-      // Notificar a otros clientes
-      notificarEvento('escarapela-impresa', { ...asistente, escarapelaImpresa: true })
+      const response = await ejecutarConTimeout(
+        () => fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+          method: 'POST',
+          headers: {
+            'X-Cliente-ID': clienteId
+          }
+        }),
+        'Imprimir escarapela'
+      )
 
-      // Abrir ventana de impresión
-      const ventanaImpresion = window.open('', '_blank')
-      if (ventanaImpresion) {
-        ventanaImpresion.document.write(`
-          <html>
-            <head>
-              <title>Escarapela - ${asistente.nombre}</title>
-              <link rel="stylesheet" href="/globals.css">
-              <style>
-                body { margin: 0; padding: 20px; }
-                .escarapela {
-                  width: 85mm;
-                  height: 54mm;
-                  border: 2px solid #000;
-                  border-radius: 8px;
-                  padding: 10px;
-                  background: white;
-                  display: flex;
-                  flex-direction: column;
-                  justify-content: center;
-                  align-items: center;
-                  font-family: Arial, sans-serif;
-                }
-                .escarapela h2 {
-                  font-size: 18px;
-                  font-weight: bold;
-                  margin-bottom: 10px;
-                  text-align: center;
-                }
-                .escarapela .nombre {
-                  font-size: 24px;
-                  font-weight: bold;
-                  text-align: center;
-                  margin: 10px 0;
-                }
-                .escarapela .cargo {
-                  font-size: 14px;
-                  text-align: center;
-                  color: #666;
-                }
-              </style>
-            </head>
-            <body>
-              <div class="escarapela">
-                <h2>EVENTO</h2>
-                <div class="nombre">${asistente.nombre}</div>
-                <div class="cargo">${asistente.cargo || ''}</div>
-                <div class="cargo">${asistente.empresa || ''}</div>
-              </div>
-              <script>
-                window.onload = function() {
-                  window.print();
-                  window.close();
-                }
-              </script>
-            </body>
-          </html>
-        `)
-        ventanaImpresion.document.close()
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
 
-      toast.success('Escarapela enviada a impresión')
-    } catch (error) {
-      toast.error('Error imprimiendo escarapela')
-    }
-  }
+      const resultado = await response.json()
 
-  const handleQRScan = async (qrData: string) => {
-    try {
-      setMostrarQRScanner(false)
-      
-      // Procesar el código QR escaneado
-      const response = await fetch('/api/qr/scan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ qrData }),
-      })
+      if (resultado.success && resultado.asistente) {
+        // Actualización optimista
+        setAsistentes(prev => 
+          prev.map(a => a.id === asistente.id ? resultado.asistente : a)
+        )
 
-      const result = await response.json()
-
-      if (result.success) {
-        // Notificar a otros clientes
-        notificarEvento('qr-escaneado', { 
-          asistente: result.asistente,
-          device: 'Móvil/QR'
-        })
+        toast.success(`🖨️ Escarapela de ${asistente.nombre} enviada a impresión`)
         
-        if (result.yaPresente) {
-          toast.info(result.message)
-        } else {
-          toast.success(result.message)
-        }
+        // Programar recarga
+        setTimeout(() => cargarAsistentes(), 500)
       } else {
-        toast.error(result.error || 'Error procesando código QR')
+        throw new Error(resultado.error || 'Respuesta inválida del servidor')
       }
+      
     } catch (error) {
-      toast.error('Error escaneando código QR')
+      console.error('❌ Error imprimiendo escarapela:', error)
+      toast.error(`Error imprimiendo escarapela: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // Recargar como fallback
+      cargarAsistentes(true)
+    } finally {
+      isUpdatingRef.current = false
     }
   }
+
+  // Función QR removida - solo prueba de cámara
 
   const generarQRAsistente = async (asistente: Asistente) => {
     try {
-      const response = await fetch(`/api/qr/generate/${asistente.id}`)
+      console.log('📱 Generando QR para:', asistente.nombre)
+      
+      const response = await fetch(`/api/qr/generate/${asistente.id}?format=image`)
       
       if (!response.ok) {
-        throw new Error('Error en la respuesta del servidor')
+        throw new Error(`Error generando QR: ${response.status}`)
       }
-
-      const data = await response.json()
       
-      if (!data.success) {
-        throw new Error(data.error || 'Error generando código QR')
-      }
-
-      // Crear elemento para descargar la imagen desde dataUrl
-      const dataUrl = data.qrCode.dataUrl
+      // Crear blob y descargar
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = dataUrl
+      a.href = url
       a.download = `qr-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}.png`
       document.body.appendChild(a)
       a.click()
+      window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      // Marcar como QR generado
-      try {
-        await fetch('/api/qr/marcar-generados', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ asistentesIds: [asistente.id] })
-        })
-      } catch (error) {
-        console.warn('Error marcando QR como generado:', error)
-      }
+      toast.success(`📱 QR de ${asistente.nombre} descargado`)
       
-      toast.success(`Código QR generado para ${asistente.nombre}`)
     } catch (error) {
-      console.error('Error generando QR:', error)
-      toast.error('Error generando código QR')
+      console.error('❌ Error generando QR:', error)
+      toast.error(`Error generando QR: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
   const agregarAsistente = async (nuevoAsistente: Omit<Asistente, 'id' | 'presente' | 'escarapelaImpresa' | 'fechaRegistro' | 'fechaImpresion' | 'qrGenerado' | 'fechaGeneracionQR'>) => {
+    if (isUpdatingRef.current) {
+      toast.warning('Operación en progreso, espera...')
+      return
+    }
+
     try {
-      console.log('➕ Agregando asistente:', nuevoAsistente)
-      
-      const response = await fetch('/api/asistentes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(nuevoAsistente),
-      })
-      
-      console.log('📡 Response status:', response.status)
-      
+      isUpdatingRef.current = true
+      console.log('➕ Agregando asistente:', nuevoAsistente.nombre)
+
+      const response = await ejecutarConTimeout(
+        () => fetch('/api/asistentes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Cliente-ID': clienteId
+          },
+          body: JSON.stringify(nuevoAsistente),
+        }),
+        'Agregar asistente'
+      )
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
+
+      const asistenteCreado = await response.json()
+
+      // Actualización optimista
+      setAsistentes(prev => [...prev, asistenteCreado])
+
+      toast.success(`✅ ${asistenteCreado.nombre} registrado exitosamente`)
       
-      const asistente = await response.json()
-      console.log('✅ Asistente creado:', asistente)
-      
-      // Actualizar lista inmediatamente
-      setAsistentes(prev => [...prev, asistente])
-      
-      // Notificar a otros clientes
-      notificarEvento('nuevo-asistente', asistente)
-      
-      toast.success(`${asistente.nombre} registrado exitosamente`)
-      
+      // Programar recarga
+      setTimeout(() => cargarAsistentes(), 500)
+
     } catch (error) {
-      console.error('❌ Error registrando asistente:', error)
+      console.error('❌ Error agregando asistente:', error)
       toast.error(`Error registrando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
       
-      // Recargar lista como fallback
-      console.log('🔄 Recargando lista como fallback...')
-      cargarAsistentes()
+      // Recargar como fallback
+      cargarAsistentes(true)
+    } finally {
+      isUpdatingRef.current = false
     }
   }
 
   const editarAsistente = async (asistenteActualizado: Asistente) => {
     try {
+      console.log('✏️ Editando asistente:', asistenteActualizado.nombre)
+
       const response = await fetch(`/api/asistentes/${asistenteActualizado.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'X-Cliente-ID': clienteId
         },
         body: JSON.stringify(asistenteActualizado),
       })
-      
-      if (response.ok) {
-        const resultado = await response.json()
-        
-        // Actualizar estado local
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
+      }
+
+      const resultado = await response.json()
+
+      if (resultado.success && resultado.asistente) {
+        // Actualización optimista
         setAsistentes(prev => 
           prev.map(a => a.id === asistenteActualizado.id ? resultado.asistente : a)
         )
+
+        toast.success(`✅ ${resultado.asistente.nombre} actualizado exitosamente`)
         
-        // Notificar a otros clientes
-        notificarEvento('asistente-actualizado', resultado.asistente)
-        
-        toast.success('Asistente actualizado correctamente')
+        // Programar recarga
+        setTimeout(() => cargarAsistentes(), 500)
       } else {
-        throw new Error('Error en la respuesta del servidor')
+        throw new Error(resultado.error || 'Respuesta inválida del servidor')
       }
+
     } catch (error) {
-      toast.error('Error actualizando asistente')
-      throw error
+      console.error('❌ Error editando asistente:', error)
+      toast.error(`Error actualizando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // Recargar como fallback
+      cargarAsistentes(true)
     }
   }
 
   const eliminarAsistente = async (id: string) => {
     try {
+      console.log('🗑️ Eliminando asistente:', id)
+
       const response = await fetch(`/api/asistentes/${id}`, {
         method: 'DELETE',
+        headers: {
+          'X-Cliente-ID': clienteId
+        }
       })
-      
-      if (response.ok) {
-        const resultado = await response.json()
-        
-        // Actualizar estado local
-        setAsistentes(prev => prev.filter(a => a.id !== id))
-        
-        // Notificar a otros clientes
-        notificarEvento('asistente-eliminado', { id })
-        
-        toast.success(resultado.mensaje)
-      } else {
-        throw new Error('Error en la respuesta del servidor')
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errorData.error || `HTTP ${response.status}`)
       }
+
+      // Actualización optimista
+      setAsistentes(prev => prev.filter(a => a.id !== id))
+
+      toast.success('🗑️ Asistente eliminado exitosamente')
+      
+      // Programar recarga
+      setTimeout(() => cargarAsistentes(), 500)
+
     } catch (error) {
-      toast.error('Error eliminando asistente')
-      throw error
+      console.error('❌ Error eliminando asistente:', error)
+      toast.error(`Error eliminando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      
+      // Recargar como fallback
+      cargarAsistentes(true)
     }
   }
 
-  // Filtrar asistentes
-  const asistentesFiltrados = asistentes.filter(asistente => {
-    const coincideFiltro = filtro === '' || 
-      asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
-      asistente.email?.toLowerCase().includes(filtro.toLowerCase()) ||
-      asistente.cargo?.toLowerCase().includes(filtro.toLowerCase()) ||
-      asistente.empresa?.toLowerCase().includes(filtro.toLowerCase())
-    
-    const cumpleFiltroEstado = !mostrarSoloPendientes || !asistente.presente
-    
-    return coincideFiltro && cumpleFiltroEstado
-  })
-
   // Estadísticas
-  const totalAsistentes = asistentes.length
-  const totalPresentes = asistentes.filter(a => a.presente).length
-  const totalPendientes = totalAsistentes - totalPresentes
+  const estadisticas = {
+    total: asistentes.length,
+    presentes: asistentes.filter(a => a.presente).length,
+    escarapelasImpresas: asistentes.filter(a => a.escarapelaImpresa).length,
+    pendientes: asistentes.filter(a => !a.presente).length
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header con estadísticas en tiempo real */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <h1 className="text-2xl font-bold text-gray-900">
-              📋 Sistema de Registro de Eventos
-            </h1>
-            
-            <div className="flex flex-wrap gap-4 text-sm">
-              <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>Total: {totalAsistentes}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1 bg-green-100 rounded-full">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Presentes: {totalPresentes}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1 bg-yellow-100 rounded-full">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                <span>Pendientes: {totalPendientes}</span>
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <span>Modo Serverless</span>
-              </div>
-
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                📋 Sistema de Registro de Eventos
+              </h1>
+              <p className="mt-2 text-sm text-gray-600">
+                Gestión de asistentes y control de asistencia
+              </p>
             </div>
             
-            <div className="flex gap-2 mt-4 sm:mt-0">
-              <Link
-                href="/importar"
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition text-sm"
-              >
-                📁 Importar
-              </Link>
-              <Link
-                href="/qr-masivo"
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition text-sm"
-              >
-                📱 QR Masivo
-              </Link>
-              <Link
-                href="/reportes"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition text-sm"
-              >
-                📊 Reportes
-              </Link>
-              <Link
-                href="/evento"
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition text-sm"
-              >
-                🎉 Evento
-              </Link>
-              <Link
-                href="/configuracion"
-                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-medium transition text-sm"
-              >
-                ⚙️ Configuración
-              </Link>
+            <div className="mt-4 sm:mt-0 flex gap-2">
               <Link
                 href="/test-qr-scanner"
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition text-sm"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
               >
-                🧪 Test QR
+                🧪 Página de Pruebas
               </Link>
+              <button
+                onClick={() => setMostrarCamara(true)}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              >
+                📱 Escanear QR
+              </button>
+            </div>
+          </div>
+
+          {/* Indicador de estado */}
+          <div className="mt-4 flex items-center gap-4 text-sm">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+              estadoSincronizacion === 'sincronizado' 
+                ? 'bg-green-100 text-green-700' 
+                : estadoSincronizacion === 'sincronizando'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {estadoSincronizacion === 'sincronizado' && '✅'}
+              {estadoSincronizacion === 'sincronizando' && '🔄'}
+              {estadoSincronizacion === 'error' && '❌'}
+              <span className="capitalize">{estadoSincronizacion}</span>
+            </div>
+            <span className="text-gray-500">Cliente: {clienteId.slice(-6)}</span>
+          </div>
+        </div>
+
+        {/* Estadísticas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl">👥</div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Total</dt>
+                    <dd className="text-lg font-medium text-gray-900">{estadisticas.total}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl">✅</div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Presentes</dt>
+                    <dd className="text-lg font-medium text-gray-900">{estadisticas.presentes}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl">⏳</div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Pendientes</dt>
+                    <dd className="text-lg font-medium text-gray-900">{estadisticas.pendientes}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl">🖨️</div>
+                </div>
+                <div className="ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-sm font-medium text-gray-500 truncate">Escarapelas</dt>
+                    <dd className="text-lg font-medium text-gray-900">{estadisticas.escarapelasImpresas}</dd>
+                  </dl>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Formulario de registro */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4 text-gray-800">
-                👤 Registro de Asistentes
-              </h2>
-              <RegistroForm onAgregarAsistente={agregarAsistente} />
-            </div>
-
-            {/* Controles */}
-            <div className="mt-6 space-y-4">
-              <button
-                onClick={() => setMostrarQRScanner(!mostrarQRScanner)}
-                className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
-              >
-                📱 {mostrarQRScanner ? 'Cerrar' : 'Escanear QR'}
-              </button>
-
-              <button
-                onClick={cargarAsistentes}
-                disabled={loading}
-                className="w-full px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
-              >
-                {loading ? '🔄 Actualizando...' : '🔄 Actualizar Lista'}
-              </button>
+            <div className="bg-white shadow-sm rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-lg font-medium text-gray-900">➕ Registrar Asistente</h2>
+              </div>
+              <div className="px-6 py-4">
+                <RegistroForm onAgregarAsistente={agregarAsistente} />
+              </div>
             </div>
           </div>
 
           {/* Lista de asistentes */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <h2 className="text-xl font-semibold text-gray-800">
-                  👥 Lista de Asistentes ({asistentesFiltrados.length})
-                </h2>
-                
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <input
-                    type="text"
-                    placeholder="Buscar asistente..."
-                    value={filtro}
-                    onChange={(e) => setFiltro(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
-                  />
-                  <label className="flex items-center gap-2 text-sm">
+            <div className="bg-white shadow-sm rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <h2 className="text-lg font-medium text-gray-900">👥 Lista de Asistentes</h2>
+                  
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
-                      type="checkbox"
-                      checked={mostrarSoloPendientes}
-                      onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
-                      className="rounded"
+                      type="text"
+                      placeholder="Buscar asistentes..."
+                      value={filtro}
+                      onChange={(e) => setFiltro(e.target.value)}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
-                    Solo pendientes
-                  </label>
+                    <label className="flex items-center text-sm text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={mostrarSoloPendientes}
+                        onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
+                        className="mr-2 rounded"
+                      />
+                      Solo pendientes
+                    </label>
+                  </div>
                 </div>
               </div>
-
-              <ListaAsistentes
-                asistentes={asistentesFiltrados}
-                onMarcarAsistencia={marcarAsistencia}
-                onImprimirEscarapela={imprimirEscarapela}
-                onGenerarQR={generarQRAsistente}
-                onEditarAsistente={editarAsistente}
-                onEliminarAsistente={eliminarAsistente}
-                loading={loading}
-              />
+              
+              <div className="px-6 py-4">
+                <ListaAsistentes
+                  asistentes={asistentesFiltrados}
+                  onMarcarAsistencia={marcarAsistencia}
+                  onImprimirEscarapela={imprimirEscarapela}
+                  onGenerarQR={generarQRAsistente}
+                  onEditarAsistente={editarAsistente}
+                  onEliminarAsistente={eliminarAsistente}
+                  loading={loading}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Scanner QR */}
-        {mostrarQRScanner && (
+        {mostrarCamara && (
           <QRScanner 
-            onScan={handleQRScan} 
-            onClose={() => setMostrarQRScanner(false)}
+            onClose={() => setMostrarCamara(false)}
           />
         )}
       </div>

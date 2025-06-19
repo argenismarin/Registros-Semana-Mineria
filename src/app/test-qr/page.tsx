@@ -1,212 +1,185 @@
 'use client'
 
-import { useState } from 'react'
-import { toast } from 'react-toastify'
+import { useState, useEffect } from 'react'
+
+interface Asistente {
+  id: string
+  nombre: string
+  email?: string
+  cargo?: string
+  empresa?: string
+  presente: boolean
+}
 
 export default function TestQRPage() {
-  const [qrData, setQrData] = useState('')
-  const [qrImage, setQrImage] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [asistentes, setAsistentes] = useState<Asistente[]>([])
+  const [loading, setLoading] = useState(true)
+  const [qrGenerado, setQrGenerado] = useState<string | null>(null)
 
-  const generarQRPrueba = async () => {
-    setLoading(true)
+  useEffect(() => {
+    cargarAsistentes()
+  }, [])
+
+  const cargarAsistentes = async () => {
     try {
-      // Crear datos de prueba
-      const testData = {
-        id: `test-${Date.now()}`,
-        nombre: 'Asistente Prueba',
-        evento: 'registro-eventos',
-        timestamp: new Date().toISOString()
-      }
-
-      // Simular llamada a la API
-      const response = await fetch('/api/qr/generate/test-123')
-      
-      if (!response.ok) {
-        throw new Error('Error en la API')
-      }
-
-      const data = await response.json()
-      
-      if (data.success) {
-        setQrData(JSON.stringify(testData, null, 2))
-        setQrImage(data.qrCode.dataUrl)
-        toast.success('¡QR generado exitosamente!')
-      } else {
-        throw new Error(data.error || 'Error desconocido')
+      const response = await fetch('/api/asistentes')
+      if (response.ok) {
+        const data = await response.json()
+        setAsistentes(data)
       }
     } catch (error) {
-      console.error('Error:', error)
-      toast.error('Error generando QR de prueba')
+      console.error('Error cargando asistentes:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const descargarQR = () => {
-    if (!qrImage) return
-    
-    const a = document.createElement('a')
-    a.href = qrImage
-    a.download = 'qr-prueba.png'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    
-    toast.success('QR descargado')
+  const generarQRSimple = (asistenteId: string) => {
+    // QR simple que contiene solo el ID del asistente
+    const qrData = asistenteId
+    setQrGenerado(qrData)
+  }
+
+  const generarQRCompleto = (asistente: Asistente) => {
+    // QR con JSON completo (como haría un generador real)
+    const qrData = JSON.stringify({
+      id: asistente.id,
+      nombre: asistente.nombre,
+      email: asistente.email,
+      timestamp: new Date().toISOString()
+    })
+    setQrGenerado(qrData)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              🧪 Prueba del Generador de QR
-            </h1>
-            <p className="text-gray-600">
-              Verifica que la generación de códigos QR funcione correctamente
-            </p>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            🧪 Generador de QR de Prueba
+          </h1>
+          <p className="text-gray-600">
+            Genera códigos QR para probar el escáner. Copia el texto generado y úsalo en un generador de QR online.
+          </p>
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Panel de control */}
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-blue-900 mb-4">
-                  📋 Controles de Prueba
-                </h2>
-                
-                <div className="space-y-4">
-                  <button
-                    onClick={generarQRPrueba}
-                    disabled={loading}
-                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition"
-                  >
-                    {loading ? '🔄 Generando...' : '🎯 Generar QR de Prueba'}
-                  </button>
-                  
-                  {qrImage && (
-                    <button
-                      onClick={descargarQR}
-                      className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
-                    >
-                      💾 Descargar QR
-                    </button>
-                  )}
-                  
-                  <a
-                    href="/"
-                    className="block w-full px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white font-medium rounded-lg transition text-center"
-                  >
-                    🏠 Volver al Inicio
-                  </a>
-                </div>
-              </div>
-
-              {/* Datos del QR */}
-              {qrData && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                    📄 Datos del QR
-                  </h3>
-                  <pre className="text-sm text-gray-700 bg-white p-4 rounded border overflow-x-auto">
-                    {qrData}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            {/* Panel de resultados */}
-            <div className="space-y-6">
-              {qrImage ? (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-                  <h2 className="text-xl font-semibold text-green-900 mb-4">
-                    ✅ QR Generado Exitosamente
-                  </h2>
-                  
-                  <div className="bg-white p-4 rounded-lg border border-green-300 inline-block">
-                    <img 
-                      src={qrImage} 
-                      alt="Código QR generado" 
-                      className="w-64 h-64 mx-auto"
-                    />
-                  </div>
-                  
-                  <p className="text-green-700 mt-4 text-sm">
-                    El código QR se generó correctamente. 
-                    Puedes descargarlo o escanearlo con tu teléfono.
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-gray-100 border border-gray-300 rounded-lg p-6 text-center">
-                  <div className="text-6xl mb-4">📱</div>
-                  <h2 className="text-xl font-semibold text-gray-700 mb-2">
-                    Esperando Generación
-                  </h2>
-                  <p className="text-gray-600">
-                    Haz clic en "Generar QR de Prueba" para ver el resultado
-                  </p>
-                </div>
-              )}
-
-              {/* Status de APIs */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-yellow-900 mb-3">
-                  🔧 Estado de APIs
-                </h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>API QR Individual: /api/qr/generate/[id]</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span>API QR Masivo: /api/qr/masivo</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                    <span>API QR Scanner: /api/qr/scan</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Enlaces útiles */}
-          <div className="mt-8 pt-8 border-t border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-              🔗 Enlaces Útiles
+        {qrGenerado && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-semibold text-green-800 mb-3">
+              ✅ Código QR Generado
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <a
-                href="/qr-masivo"
-                className="block p-4 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition text-center"
+            <div className="bg-white border rounded p-4 mb-4">
+              <pre className="text-sm text-gray-800 whitespace-pre-wrap break-all">
+                {qrGenerado}
+              </pre>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigator.clipboard.writeText(qrGenerado)}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
-                <div className="text-2xl mb-2">📱</div>
-                <div className="font-medium text-indigo-900">QR Masivo</div>
-                <div className="text-sm text-indigo-700">Generar múltiples QR</div>
-              </a>
-              
-              <a
-                href="/importar"
-                className="block p-4 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition text-center"
+                📋 Copiar al portapapeles
+              </button>
+              <button
+                onClick={() => setQrGenerado(null)}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
               >
-                <div className="text-2xl mb-2">📁</div>
-                <div className="font-medium text-green-900">Importar</div>
-                <div className="text-sm text-green-700">Cargar asistentes</div>
-              </a>
-              
-              <a
-                href="/reportes"
-                className="block p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition text-center"
-              >
-                <div className="text-2xl mb-2">📊</div>
-                <div className="font-medium text-blue-900">Reportes</div>
-                <div className="text-sm text-blue-700">Ver estadísticas</div>
-              </a>
+                ✖️ Cerrar
+              </button>
+            </div>
+            <div className="mt-4 text-sm text-green-700">
+              <p><strong>Instrucciones:</strong></p>
+              <ol className="list-decimal list-inside mt-2 space-y-1">
+                <li>Copia el texto de arriba</li>
+                <li>Ve a un generador QR online (ej: qr-code-generator.com)</li>
+                <li>Pega el texto y genera el QR</li>
+                <li>Muestra el QR al escáner en la página principal</li>
+              </ol>
             </div>
           </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold mb-4">👥 Asistentes Disponibles</h2>
+          
+          {asistentes.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              No hay asistentes disponibles
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {asistentes.map((asistente) => (
+                <div key={asistente.id} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-semibold text-lg">
+                        {asistente.nombre}
+                        {asistente.presente && (
+                          <span className="ml-2 text-sm bg-green-100 text-green-800 px-2 py-1 rounded">
+                            ✅ Presente
+                          </span>
+                        )}
+                      </h3>
+                      {asistente.cargo && (
+                        <p className="text-gray-600">{asistente.cargo}</p>
+                      )}
+                      {asistente.empresa && (
+                        <p className="text-gray-500 text-sm">{asistente.empresa}</p>
+                      )}
+                      {asistente.email && (
+                        <p className="text-gray-500 text-sm">{asistente.email}</p>
+                      )}
+                      <p className="text-gray-400 text-xs mt-1">ID: {asistente.id}</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => generarQRSimple(asistente.id)}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                      >
+                        📱 QR Simple
+                      </button>
+                      <button
+                        onClick={() => generarQRCompleto(asistente)}
+                        className="px-3 py-1 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
+                      >
+                        📱 QR Completo
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-blue-800 mb-3">
+            💡 Consejos para Pruebas
+          </h3>
+          <ul className="space-y-2 text-blue-700">
+            <li><strong>QR Simple:</strong> Solo contiene el ID del asistente (más fácil de generar)</li>
+            <li><strong>QR Completo:</strong> Contiene JSON con toda la información (más realista)</li>
+            <li><strong>Prueba 1:</strong> Genera un QR, escanéalo → debe marcar como presente</li>
+            <li><strong>Prueba 2:</strong> Escanea el mismo QR → debe decir "ya presente"</li>
+            <li><strong>Prueba 3:</strong> Escanea un QR inválido → debe mostrar error</li>
+          </ul>
+        </div>
+
+        <div className="mt-6 text-center">
+          <a
+            href="/"
+            className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+          >
+            ← Volver al inicio
+          </a>
         </div>
       </div>
     </div>

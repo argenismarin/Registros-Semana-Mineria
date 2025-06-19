@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/database'
-import googleSheetsService from '@/lib/googleSheets'
 
 export async function POST(
   request: NextRequest,
@@ -43,19 +42,6 @@ export async function POST(
     }
 
     console.log('✅ Asistente actualizado:', asistenteActualizado)
-
-    // 🆕 SINCRONIZAR CON GOOGLE SHEETS
-    if (googleSheetsService.isConfigured()) {
-      try {
-        await googleSheetsService.updateAsistente(asistenteActualizado)
-        console.log('📊 Asistencia sincronizada con Google Sheets:', asistenteActualizado.nombre)
-      } catch (error) {
-        console.error('⚠️ Error sincronizando asistencia con Google Sheets:', error)
-        // No fallar la respuesta por esto, pero logearlo
-      }
-    } else {
-      console.log('⚠️ Google Sheets no configurado, asistencia solo en memoria local')
-    }
 
     // Notificar a otros clientes vía Socket.io (no bloquear respuesta)
     fetch('/api/socket.io', {

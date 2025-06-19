@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/database'
-import googleSheetsService from '@/lib/googleSheets'
 
 export async function POST(
   request: NextRequest,
@@ -8,7 +7,7 @@ export async function POST(
 ) {
   try {
     const id = params.id
-    console.log('📝 POST /api/asistentes/[id]/asistencia - Marcando asistencia para:', id)
+    console.log('🖨️ POST /api/asistentes/[id]/imprimir - Marcando escarapela como impresa para:', id)
     
     // Buscar el asistente primero
     const asistenteExistente = db.findAsistenteById(id)
@@ -25,10 +24,10 @@ export async function POST(
 
     console.log('👤 Asistente encontrado:', asistenteExistente.nombre)
     
-    // Marcar como presente y registrar hora de llegada
+    // Marcar escarapela como impresa
     const asistenteActualizado = db.updateAsistente(id, {
-      presente: true,
-      horaLlegada: new Date().toISOString()
+      escarapelaImpresa: true,
+      fechaImpresion: new Date().toISOString()
     })
     
     if (!asistenteActualizado) {
@@ -42,31 +41,15 @@ export async function POST(
       )
     }
 
-    console.log('✅ Asistente actualizado:', asistenteActualizado)
-
-    // 🆕 SINCRONIZAR CON GOOGLE SHEETS
-    if (googleSheetsService.isConfigured()) {
-      try {
-        await googleSheetsService.updateAsistente(asistenteActualizado)
-        console.log('📊 Asistencia sincronizada con Google Sheets:', asistenteActualizado.nombre)
-      } catch (error) {
-        console.error('⚠️ Error sincronizando asistencia con Google Sheets:', error)
-        // No fallar la respuesta por esto, pero logearlo
-      }
-    } else {
-      console.log('⚠️ Google Sheets no configurado, asistencia solo en memoria local')
-    }
+    console.log('✅ Escarapela marcada como impresa:', asistenteActualizado)
 
     // Notificar a otros clientes vía Socket.io (no bloquear respuesta)
     fetch('/api/socket.io', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        event: 'asistencia-marcada',
-        data: { 
-          asistente: asistenteActualizado,
-          device: 'Manual'
-        }
+        event: 'escarapela-impresa',
+        data: asistenteActualizado
       })
     }).catch(error => {
       console.error('⚠️ Error notificando via socket (no crítico):', error)
@@ -75,11 +58,11 @@ export async function POST(
     return NextResponse.json({
       success: true,
       asistente: asistenteActualizado,
-      message: `${asistenteActualizado.nombre} marcado como presente`
+      message: `Escarapela de ${asistenteActualizado.nombre} marcada como impresa`
     })
     
   } catch (error) {
-    console.error('❌ Error marcando asistencia:', error)
+    console.error('❌ Error marcando escarapela como impresa:', error)
     return NextResponse.json(
       { 
         success: false,
