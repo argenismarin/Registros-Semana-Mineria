@@ -103,144 +103,96 @@ export default function Home() {
 
   const marcarAsistencia = async (id: string) => {
     try {
-      console.log('✅ Marcando asistencia para:', id)
-      
       const response = await fetch(`/api/asistentes/${id}/asistencia`, {
         method: 'POST',
       })
+      const asistente = await response.json()
       
-      console.log('📡 Response status:', response.status)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-      
-      const resultado = await response.json()
-      console.log('✅ Resultado:', resultado)
-      
-      if (resultado.success && resultado.asistente) {
-        // Actualizar estado local inmediatamente
-        setAsistentes(prev => 
-          prev.map(a => a.id === id ? resultado.asistente : a)
-        )
-        
-        // Notificar a otros clientes
-        notificarEvento('asistencia-marcada', { 
-          asistente: resultado.asistente, 
-          device: 'Manual' 
-        })
-        
-        toast.success(`✅ ${resultado.asistente.nombre} marcado como presente`)
-      } else {
-        throw new Error(resultado.error || 'Respuesta inválida del servidor')
-      }
+      // Notificar a otros clientes
+      notificarEvento('asistencia-marcada', { 
+        asistente, 
+        device: 'Manual' 
+      })
       
     } catch (error) {
-      console.error('❌ Error marcando asistencia:', error)
-      toast.error(`Error marcando asistencia: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      
-      // Recargar lista como fallback
-      console.log('🔄 Recargando lista como fallback...')
-      cargarAsistentes()
+      toast.error('Error marcando asistencia')
     }
   }
 
   const imprimirEscarapela = async (asistente: Asistente) => {
     try {
-      console.log('🖨️ Imprimiendo escarapela para:', asistente.nombre)
-      
       // Marcar como impresa en la base de datos
-      const response = await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+      await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
         method: 'POST',
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-      
-      const resultado = await response.json()
-      console.log('✅ Resultado impresión:', resultado)
-      
-      if (resultado.success && resultado.asistente) {
-        // Actualizar estado local inmediatamente
-        setAsistentes(prev => 
-          prev.map(a => a.id === asistente.id ? resultado.asistente : a)
-        )
-        
-        // Notificar a otros clientes
-        notificarEvento('escarapela-impresa', resultado.asistente)
-        
-        // Abrir ventana de impresión
-        const ventanaImpresion = window.open('', '_blank')
-        if (ventanaImpresion) {
-          ventanaImpresion.document.write(`
-            <html>
-              <head>
-                <title>Escarapela - ${asistente.nombre}</title>
-                <link rel="stylesheet" href="/globals.css">
-                <style>
-                  body { margin: 0; padding: 20px; }
-                  .escarapela {
-                    width: 85mm;
-                    height: 54mm;
-                    border: 2px solid #000;
-                    border-radius: 8px;
-                    padding: 10px;
-                    background: white;
-                    display: flex;
-                    flex-direction: column;
-                    justify-content: center;
-                    align-items: center;
-                    font-family: Arial, sans-serif;
-                  }
-                  .escarapela h2 {
-                    font-size: 18px;
-                    font-weight: bold;
-                    margin-bottom: 10px;
-                    text-align: center;
-                  }
-                  .escarapela .nombre {
-                    font-size: 24px;
-                    font-weight: bold;
-                    text-align: center;
-                    margin: 10px 0;
-                  }
-                  .escarapela .cargo {
-                    font-size: 14px;
-                    text-align: center;
-                    color: #666;
-                  }
-                </style>
-              </head>
-              <body>
-                <div class="escarapela">
-                  <h2>EVENTO</h2>
-                  <div class="nombre">${asistente.nombre}</div>
-                  <div class="cargo">${asistente.cargo || ''}</div>
-                  <div class="cargo">${asistente.empresa || ''}</div>
-                </div>
-                <script>
-                  window.onload = function() {
-                    window.print();
-                    window.close();
-                  }
-                </script>
-              </body>
-            </html>
-          `)
-          ventanaImpresion.document.close()
-        }
 
-        toast.success(`🖨️ Escarapela de ${asistente.nombre} enviada a impresión`)
-      } else {
-        throw new Error(resultado.error || 'Respuesta inválida del servidor')
+      // Notificar a otros clientes
+      notificarEvento('escarapela-impresa', { ...asistente, escarapelaImpresa: true })
+
+      // Abrir ventana de impresión
+      const ventanaImpresion = window.open('', '_blank')
+      if (ventanaImpresion) {
+        ventanaImpresion.document.write(`
+          <html>
+            <head>
+              <title>Escarapela - ${asistente.nombre}</title>
+              <link rel="stylesheet" href="/globals.css">
+              <style>
+                body { margin: 0; padding: 20px; }
+                .escarapela {
+                  width: 85mm;
+                  height: 54mm;
+                  border: 2px solid #000;
+                  border-radius: 8px;
+                  padding: 10px;
+                  background: white;
+                  display: flex;
+                  flex-direction: column;
+                  justify-content: center;
+                  align-items: center;
+                  font-family: Arial, sans-serif;
+                }
+                .escarapela h2 {
+                  font-size: 18px;
+                  font-weight: bold;
+                  margin-bottom: 10px;
+                  text-align: center;
+                }
+                .escarapela .nombre {
+                  font-size: 24px;
+                  font-weight: bold;
+                  text-align: center;
+                  margin: 10px 0;
+                }
+                .escarapela .cargo {
+                  font-size: 14px;
+                  text-align: center;
+                  color: #666;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="escarapela">
+                <h2>EVENTO</h2>
+                <div class="nombre">${asistente.nombre}</div>
+                <div class="cargo">${asistente.cargo || ''}</div>
+                <div class="cargo">${asistente.empresa || ''}</div>
+              </div>
+              <script>
+                window.onload = function() {
+                  window.print();
+                  window.close();
+                }
+              </script>
+            </body>
+          </html>
+        `)
+        ventanaImpresion.document.close()
       }
-      
+
+      toast.success('Escarapela enviada a impresión')
     } catch (error) {
-      console.error('❌ Error imprimiendo escarapela:', error)
-      toast.error(`Error imprimiendo escarapela: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      toast.error('Error imprimiendo escarapela')
     }
   }
 
