@@ -69,13 +69,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sincronizar con Google Sheets
+    // Sincronizar con Google Sheets de forma optimizada
     if (googleSheetsService.isConfigured()) {
       try {
-        await googleSheetsService.updateAsistente(asistenteActualizado)
-        console.log('Asistencia sincronizada con Google Sheets:', asistenteActualizado.nombre)
+        // Usar método optimizado para actualizar solo el estado de asistencia
+        const syncSuccess = await googleSheetsService.updateAsistenciaStatus(
+          asistenteInfo.id, 
+          true, 
+          asistenteActualizado.horaLlegada
+        )
+        
+        if (syncSuccess) {
+          console.log('📊 ✅ Asistencia por QR sincronizada exitosamente con Google Sheets:', asistenteActualizado.nombre)
+        } else {
+          console.log('📊 ⚠️ Sincronización QR parcial - usando método completo como respaldo')
+          // Fallback al método completo si el optimizado falla
+          await googleSheetsService.updateAsistente(asistenteActualizado)
+        }
       } catch (error) {
-        console.error('Error sincronizando asistencia con Google Sheets:', error)
+        console.error('⚠️ Error sincronizando asistencia por QR con Google Sheets:', error)
       }
     }
 

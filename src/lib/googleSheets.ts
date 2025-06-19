@@ -229,6 +229,7 @@ class GoogleSheetsService {
   // Sincronizar datos entre memoria local y Google Sheets
   async syncWithMemoryDatabase(memoryAsistentes: Asistente[]): Promise<Asistente[]> {
     try {
+      console.log('🔄 Sincronizando con Google Sheets...')
       const sheetsAsistentes = await this.getAsistentes()
       
       // Combinar datos - priorizar los datos más recientes
@@ -240,19 +241,121 @@ class GoogleSheetsService {
       })
       
       // Sobrescribir con datos de memoria (más recientes)
+      const updatePromises: Promise<boolean>[] = []
+      
       memoryAsistentes.forEach(asistente => {
         const existing = merged.get(asistente.id)
-        if (!existing || new Date(asistente.fechaRegistro) >= new Date(existing.fechaRegistro)) {
+        
+        // Si no existe en Sheets o los datos de memoria son más recientes
+        if (!existing || 
+            new Date(asistente.fechaRegistro) >= new Date(existing.fechaRegistro) ||
+            asistente.presente !== existing.presente ||
+            asistente.escarapelaImpresa !== existing.escarapelaImpresa) {
+          
           merged.set(asistente.id, asistente)
-          // Actualizar en Sheets
-          this.updateAsistente(asistente).catch(console.error)
+          
+          // Agregar promesa de actualización
+          if (existing) {
+            updatePromises.push(this.updateAsistente(asistente))
+          } else {
+            updatePromises.push(this.addAsistente(asistente))
+          }
         }
       })
+      
+      // Ejecutar todas las actualizaciones en paralelo
+      if (updatePromises.length > 0) {
+        console.log(`📊 Actualizando ${updatePromises.length} registros en Google Sheets...`)
+        await Promise.allSettled(updatePromises)
+      }
       
       return Array.from(merged.values())
     } catch (error) {
       console.error('Error sincronizando con Google Sheets:', error)
       return memoryAsistentes // Fallback a datos en memoria
+    }
+  }
+
+  // Método para sincronización automática en tiempo real
+  async syncAsistenteToSheets(asistente: Asistente): Promise<boolean> {
+    try {
+      if (!this.isConfigured()) {
+        console.log('⚠️ Google Sheets no configurado para sincronización automática')
+        return false
+      }
+
+      console.log(`🔄 Sincronizando asistente ${asistente.nombre} con Google Sheets...`)
+      
+      // Verificar si el asistente ya existe en Sheets
+      const existing = await this.findAsistenteById(asistente.id)
+      
+      let success = false
+      if (existing) {
+        success = await this.updateAsistente(asistente)
+      } else {
+        success = await this.addAsistente(asistente)
+      }
+      
+      if (success) {
+        console.log(`✅ Asistente ${asistente.nombre} sincronizado exitosamente`)
+      } else {
+        console.error(`❌ Error sincronizando asistente ${asistente.nombre}`)
+      }
+      
+      return success
+    } catch (error) {
+      console.error(`❌ Error en sincronización automática de ${asistente.nombre}:`, error)
+      return false
+    }
+  }
+
+  // Método optimizado para actualizar solo el estado de presente
+  async updateAsistenciaStatus(asistenteId: string, presente: boolean, horaLlegada?: string): Promise<boolean> {
+    try {
+      if (!this.spreadsheetId) {
+        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+        return false
+      }
+
+      const sheets = await this.initializeSheets()
+      
+      // Buscar la fila del asistente
+      const allData = await sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: 'Asistentes!A2:J',
+      })
+
+      const rows = allData.data.values || []
+      const rowIndex = rows.findIndex(row => row[0] === asistenteId)
+      
+      if (rowIndex === -1) {
+        console.error('Asistente no encontrado en Google Sheets para actualización de asistencia')
+        return false
+      }
+
+      // Actualizar solo las columnas de presente y hora de llegada (columnas F y I)
+      const updateRange = `Asistentes!F${rowIndex + 2}:I${rowIndex + 2}`
+      const values = [[
+        presente, // Columna F (presente)
+        rows[rowIndex][6] || false, // Columna G (escarapelaImpresa) - mantener valor existente
+        rows[rowIndex][7] || new Date().toISOString(), // Columna H (fechaRegistro) - mantener valor existente
+        horaLlegada || rows[rowIndex][8] || '' // Columna I (horaLlegada) - actualizar si se proporciona
+      ]]
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: this.spreadsheetId,
+        range: updateRange,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values,
+        },
+      })
+
+      console.log(`✅ Estado de asistencia actualizado en Google Sheets para ${asistenteId}`)
+      return true
+    } catch (error) {
+      console.error('Error actualizando estado de asistencia en Google Sheets:', error)
+      return false
     }
   }
 

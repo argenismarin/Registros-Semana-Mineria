@@ -30,6 +30,8 @@ export default function Home() {
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
   const [asistenteParaEscarapela, setAsistenteParaEscarapela] = useState<Asistente | null>(null)
+  const [estadoGoogleSheets, setEstadoGoogleSheets] = useState<'configurado' | 'no-configurado' | 'sincronizando' | 'error'>('no-configurado')
+  const [ultimaSincronizacion, setUltimaSincronizacion] = useState<string | null>(null)
   
   // Estados para tiempo real
   const [clienteId, setClienteId] = useState('')
@@ -121,6 +123,53 @@ export default function Home() {
     }
   }, [clienteId, loading])
 
+  // Verificar estado de Google Sheets
+  const verificarEstadoGoogleSheets = useCallback(async () => {
+    try {
+      const response = await fetch('/api/sincronizacion')
+      const data = await response.json()
+      
+      if (data.configured) {
+        setEstadoGoogleSheets('configurado')
+      } else {
+        setEstadoGoogleSheets('no-configurado')
+      }
+    } catch (error) {
+      console.error('Error verificando Google Sheets:', error)
+      setEstadoGoogleSheets('error')
+    }
+  }, [])
+
+  // Sincronizar manualmente con Google Sheets
+  const sincronizarGoogleSheets = async () => {
+    if (estadoGoogleSheets === 'sincronizando') return
+
+    try {
+      setEstadoGoogleSheets('sincronizando')
+      
+      const response = await fetch('/api/sincronizacion', {
+        method: 'POST'
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        setEstadoGoogleSheets('configurado')
+        setUltimaSincronizacion(data.timestamp)
+        toast.success('📊 Sincronización con Google Sheets completada')
+        
+        // Recargar asistentes
+        cargarAsistentes(true)
+      } else {
+        throw new Error(data.error || 'Error en sincronización')
+      }
+    } catch (error) {
+      console.error('Error sincronizando:', error)
+      setEstadoGoogleSheets('error')
+      toast.error(`Error sincronizando: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
   // Configurar polling para tiempo real
   useEffect(() => {
     // Solo cargar asistentes si ya tenemos clienteId
@@ -128,6 +177,9 @@ export default function Home() {
     
     // Carga inicial
     cargarAsistentes(true)
+    
+    // Verificar estado de Google Sheets
+    verificarEstadoGoogleSheets()
 
     // Configurar polling
     intervalRef.current = setInterval(() => {
@@ -140,7 +192,7 @@ export default function Home() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [clienteId, cargarAsistentes]) // Agregar clienteId como dependencia
+  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets]) // Agregar clienteId como dependencia
 
   const marcarAsistencia = async (id: string) => {
     if (isUpdatingRef.current) {
@@ -483,6 +535,15 @@ export default function Home() {
               >
                 🧪 Página de Pruebas
               </Link>
+              {(estadoGoogleSheets === 'configurado' || estadoGoogleSheets === 'sincronizando') && (
+                <button
+                  onClick={sincronizarGoogleSheets}
+                  disabled={estadoGoogleSheets === 'sincronizando'}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {estadoGoogleSheets === 'sincronizando' ? '🔄' : '📊'} Sincronizar
+                </button>
+              )}
               <button
                 onClick={() => setMostrarCamara(true)}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
@@ -506,7 +567,35 @@ export default function Home() {
               {estadoSincronizacion === 'error' && '❌'}
               <span className="capitalize">{estadoSincronizacion}</span>
             </div>
+            
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+              estadoGoogleSheets === 'configurado' 
+                ? 'bg-purple-100 text-purple-700' 
+                : estadoGoogleSheets === 'sincronizando'
+                ? 'bg-blue-100 text-blue-700'
+                : estadoGoogleSheets === 'no-configurado'
+                ? 'bg-gray-100 text-gray-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {estadoGoogleSheets === 'configurado' && '📊'}
+              {estadoGoogleSheets === 'sincronizando' && '🔄'}
+              {estadoGoogleSheets === 'no-configurado' && '📋'}
+              {estadoGoogleSheets === 'error' && '❌'}
+              <span>
+                {estadoGoogleSheets === 'configurado' && 'Google Sheets'}
+                {estadoGoogleSheets === 'sincronizando' && 'Sincronizando...'}
+                {estadoGoogleSheets === 'no-configurado' && 'Sin Google Sheets'}
+                {estadoGoogleSheets === 'error' && 'Error Sheets'}
+              </span>
+            </div>
+            
             <span className="text-gray-500">Cliente: {clienteId.slice(-6)}</span>
+            
+            {ultimaSincronizacion && (
+              <span className="text-gray-500">
+                Última sync: {new Date(ultimaSincronizacion).toLocaleTimeString()}
+              </span>
+            )}
           </div>
         </div>
 
