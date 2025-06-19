@@ -30,7 +30,7 @@ export default function Home() {
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
   
   // Estados para tiempo real
-  const [clienteId] = useState(`cliente-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  const [clienteId, setClienteId] = useState('')
   const [estadoSincronizacion, setEstadoSincronizacion] = useState<'sincronizado' | 'sincronizando' | 'error'>('sincronizado')
   const intervalRef = useRef<NodeJS.Timeout>()
   const isUpdatingRef = useRef(false)
@@ -38,6 +38,11 @@ export default function Home() {
   // Configuración
   const INTERVALO_POLLING = 30000 // 30 segundos para reducir carga
   const TIMEOUT_OPERACION = 10000 // 10 segundos
+
+  // Generar clienteId solo en el cliente para evitar errores de hidratación
+  useEffect(() => {
+    setClienteId(`cliente-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
+  }, [])
 
   const asistentesFiltrados = asistentes.filter(asistente => {
     const coincideFiltro = !filtro || 
@@ -75,6 +80,12 @@ export default function Home() {
       return
     }
 
+    // No hacer nada si no tenemos clienteId aún
+    if (!clienteId) {
+      console.log('⏭️ Esperando clienteId...')
+      return
+    }
+
     try {
       setEstadoSincronizacion('sincronizando')
       
@@ -106,10 +117,13 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }, [loading, clienteId])
+  }, [clienteId, loading])
 
   // Configurar polling para tiempo real
   useEffect(() => {
+    // Solo cargar asistentes si ya tenemos clienteId
+    if (!clienteId) return
+    
     // Carga inicial
     cargarAsistentes(true)
 
@@ -124,7 +138,7 @@ export default function Home() {
         clearInterval(intervalRef.current)
       }
     }
-  }, []) // Solo en mount
+  }, [clienteId, cargarAsistentes]) // Agregar clienteId como dependencia
 
   const marcarAsistencia = async (id: string) => {
     if (isUpdatingRef.current) {
