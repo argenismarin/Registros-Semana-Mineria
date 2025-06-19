@@ -5,6 +5,7 @@ import { toast } from 'react-toastify'
 import RegistroForm from '@/components/RegistroForm'
 import ListaAsistentes from '@/components/ListaAsistentes'
 import QRScanner from '@/components/QRScanner'
+import SelectorPosicionEscarapela from '@/components/SelectorPosicionEscarapela'
 import Link from 'next/link'
 
 interface Asistente {
@@ -28,6 +29,7 @@ export default function Home() {
   const [mostrarCamara, setMostrarCamara] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
+  const [asistenteParaEscarapela, setAsistenteParaEscarapela] = useState<Asistente | null>(null)
   
   // Estados para tiempo real
   const [clienteId, setClienteId] = useState('')
@@ -193,14 +195,18 @@ export default function Home() {
   }
 
   const imprimirEscarapela = async (asistente: Asistente) => {
-    if (isUpdatingRef.current) {
-      toast.warning('Operación en progreso, espera...')
+    // Abrir modal de selección de posición
+    setAsistenteParaEscarapela(asistente)
+  }
+
+  const confirmarImpresionEscarapela = async (posicion: number) => {
+    if (!asistenteParaEscarapela || isUpdatingRef.current) {
       return
     }
 
     try {
       isUpdatingRef.current = true
-      console.log('🖨️ Generando PDF de escarapela para:', asistente.nombre)
+      console.log('🖨️ Generando PDF de escarapela para:', asistenteParaEscarapela.nombre, 'en posición:', posicion + 1)
 
       // Obtener configuración del evento
       let eventoNombre = 'EVENTO'
@@ -222,12 +228,12 @@ export default function Home() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            asistentes: [asistente],
+            asistentes: [asistenteParaEscarapela],
             opciones: {
-              posicionesSeleccionadas: [0], // Primera posición (índice 0)
+              posicionesSeleccionadas: [posicion], // Posición seleccionada
               eventoNombre: eventoNombre,
-              mostrarCargo: !!asistente.cargo,
-              mostrarEmpresa: !!asistente.empresa
+              mostrarCargo: !!asistenteParaEscarapela.cargo,
+              mostrarEmpresa: !!asistenteParaEscarapela.empresa
             }
           })
         }),
@@ -243,14 +249,14 @@ export default function Home() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `escarapela-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`
+      link.download = `escarapela-${asistenteParaEscarapela.nombre.replace(/\s+/g, '-').toLowerCase()}-pos${posicion + 1}-${new Date().toISOString().split('T')[0]}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
       // Marcar como impresa en el backend
-      const marcarResponse = await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+      const marcarResponse = await fetch(`/api/asistentes/${asistenteParaEscarapela.id}/imprimir`, {
         method: 'POST',
         headers: {
           'X-Cliente-ID': clienteId
@@ -262,12 +268,15 @@ export default function Home() {
         if (resultado.success && resultado.asistente) {
           // Actualización optimista
           setAsistentes(prev => 
-            prev.map(a => a.id === asistente.id ? resultado.asistente : a)
+            prev.map(a => a.id === asistenteParaEscarapela.id ? resultado.asistente : a)
           )
         }
       }
 
-      toast.success(`🖨️ PDF de escarapela de ${asistente.nombre} generado y descargado`)
+      toast.success(`🖨️ PDF de escarapela de ${asistenteParaEscarapela.nombre} generado en posición ${posicion + 1}`)
+      
+      // Cerrar modal
+      setAsistenteParaEscarapela(null)
       
       // Programar recarga
       setTimeout(() => cargarAsistentes(), 500)
@@ -627,6 +636,14 @@ export default function Home() {
         {mostrarCamara && (
           <QRScanner 
             onClose={() => setMostrarCamara(false)}
+          />
+        )}
+
+        {asistenteParaEscarapela && (
+          <SelectorPosicionEscarapela
+            asistente={asistenteParaEscarapela}
+            onConfirmar={confirmarImpresionEscarapela}
+            onCancelar={() => setAsistenteParaEscarapela(null)}
           />
         )}
       </div>
