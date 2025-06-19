@@ -200,42 +200,81 @@ export default function Home() {
 
     try {
       isUpdatingRef.current = true
-      console.log('🖨️ Imprimiendo escarapela para:', asistente.nombre)
+      console.log('🖨️ Generando PDF de escarapela para:', asistente.nombre)
 
+      // Obtener configuración del evento
+      let eventoNombre = 'EVENTO'
+      try {
+        const configResponse = await fetch('/api/evento/configuracion')
+        if (configResponse.ok) {
+          const config = await configResponse.json()
+          eventoNombre = config.nombre || 'EVENTO'
+        }
+      } catch (error) {
+        console.log('⚠️ No se pudo obtener configuración del evento, usando nombre por defecto')
+      }
+
+      // Generar PDF usando el sistema de escarapelas
       const response = await ejecutarConTimeout(
-        () => fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+        () => fetch('/api/reportes/pdf', {
           method: 'POST',
           headers: {
-            'X-Cliente-ID': clienteId
-          }
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            asistentes: [asistente],
+            opciones: {
+              posicionesSeleccionadas: [0], // Primera posición (índice 0)
+              eventoNombre: eventoNombre,
+              mostrarCargo: !!asistente.cargo,
+              mostrarEmpresa: !!asistente.empresa
+            }
+          })
         }),
-        'Imprimir escarapela'
+        'Generar PDF de escarapela'
       )
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
+        throw new Error(`Error generando PDF: ${response.status}`)
       }
 
-      const resultado = await response.json()
+      // Descargar el PDF
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `escarapela-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
 
-      if (resultado.success && resultado.asistente) {
-        // Actualización optimista
-        setAsistentes(prev => 
-          prev.map(a => a.id === asistente.id ? resultado.asistente : a)
-        )
+      // Marcar como impresa en el backend
+      const marcarResponse = await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+        method: 'POST',
+        headers: {
+          'X-Cliente-ID': clienteId
+        }
+      })
 
-        toast.success(`🖨️ Escarapela de ${asistente.nombre} enviada a impresión`)
-        
-        // Programar recarga
-        setTimeout(() => cargarAsistentes(), 500)
-      } else {
-        throw new Error(resultado.error || 'Respuesta inválida del servidor')
+      if (marcarResponse.ok) {
+        const resultado = await marcarResponse.json()
+        if (resultado.success && resultado.asistente) {
+          // Actualización optimista
+          setAsistentes(prev => 
+            prev.map(a => a.id === asistente.id ? resultado.asistente : a)
+          )
+        }
       }
+
+      toast.success(`🖨️ PDF de escarapela de ${asistente.nombre} generado y descargado`)
+      
+      // Programar recarga
+      setTimeout(() => cargarAsistentes(), 500)
       
     } catch (error) {
-      console.error('❌ Error imprimiendo escarapela:', error)
-      toast.error(`Error imprimiendo escarapela: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      console.error('❌ Error generando escarapela:', error)
+      toast.error(`Error generando escarapela: ${error instanceof Error ? error.message : 'Error desconocido'}`)
       
       // Recargar como fallback
       cargarAsistentes(true)
@@ -423,6 +462,12 @@ export default function Home() {
             </div>
             
             <div className="mt-4 sm:mt-0 flex gap-2">
+              <Link
+                href="/escarapelas"
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                🏷️ Escarapelas
+              </Link>
               <Link
                 href="/test-qr-scanner"
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
