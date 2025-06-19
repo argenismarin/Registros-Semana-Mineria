@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener asistentes de memoria local
-    const memoryAsistentes = db.getAllAsistentes()
+    const memoryAsistentes = db.getAsistentes()
     console.log(`📊 Asistentes en memoria: ${memoryAsistentes.length}`)
 
     // Sincronizar con Google Sheets
@@ -87,22 +87,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener datos básicos
-    const memoryAsistentes = db.getAllAsistentes()
+    const memoryAsistentes = db.getAsistentes()
     const sheetsAsistentes = await googleSheetsService.getAsistentes()
 
     const estadisticas = {
       memoria: {
         total: memoryAsistentes.length,
-        presentes: memoryAsistentes.filter(a => a.presente).length,
+        presentes: memoryAsistentes.filter((a: any) => a.presente).length,
         ultimaActualizacion: memoryAsistentes.length > 0 
-          ? Math.max(...memoryAsistentes.map(a => new Date(a.fechaRegistro).getTime()))
+          ? Math.max(...memoryAsistentes.map((a: any) => new Date(a.fechaRegistro).getTime()))
           : null
       },
       sheets: {
         total: sheetsAsistentes.length,
-        presentes: sheetsAsistentes.filter(a => a.presente).length,
+        presentes: sheetsAsistentes.filter((a: any) => a.presente).length,
         ultimaActualizacion: sheetsAsistentes.length > 0
-          ? Math.max(...sheetsAsistentes.map(a => new Date(a.fechaRegistro).getTime()))
+          ? Math.max(...sheetsAsistentes.map((a: any) => new Date(a.fechaRegistro).getTime()))
           : null
       }
     }
