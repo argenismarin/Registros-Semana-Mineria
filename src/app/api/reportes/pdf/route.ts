@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     // Función para dibujar una escarapela
     const dibujarEscarapela = (asistente: Asistente, x: number, y: number) => {
       // Área completa disponible con padding mínimo
-      const padding = 1
+      const padding = 0.5
       const innerX = x + padding
       const innerY = y + padding
       const innerWidth = escarapelaWidth - (padding * 2)
@@ -63,26 +63,26 @@ export async function POST(request: NextRequest) {
       // NOMBRE DEL ASISTENTE (lo más grande posible)
       doc.setFont('helvetica', 'bold')
       
-      // Empezar con tamaño grande y ajustar según el ancho disponible
-      let nombreFontSize = 16
+      // Empezar con tamaño muy grande y ajustar según el ancho disponible
+      let nombreFontSize = 24
       const nombreCompleto = asistente.nombre
       
       // Ajustar tamaño de fuente para que quepa en el ancho
       doc.setFontSize(nombreFontSize)
-      while (doc.getTextWidth(nombreCompleto) > innerWidth - 2 && nombreFontSize > 8) {
-        nombreFontSize -= 1
+      while (doc.getTextWidth(nombreCompleto) > innerWidth - 1 && nombreFontSize > 10) {
+        nombreFontSize -= 0.5
         doc.setFontSize(nombreFontSize)
       }
       
       // Dividir nombre en líneas si es necesario
-      const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 2)
+      const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 1)
       const numeroLineasNombre = Math.min(nombreLineas.length, 2)
       
       // Posición Y inicial para centrar verticalmente todo el contenido
       let currentY
       if (asistente.cargo && asistente.cargo.trim() !== '') {
         // Si hay cargo, calcular posición para centrar ambos elementos
-        const alturaTotal = (numeroLineasNombre * nombreFontSize * 0.35) + 8 // 8mm para el cargo
+        const alturaTotal = (numeroLineasNombre * nombreFontSize * 0.35) + 6
         currentY = centerY - (alturaTotal / 2) + (nombreFontSize * 0.35)
       } else {
         // Si no hay cargo, centrar solo el nombre
@@ -94,27 +94,27 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < numeroLineasNombre; i++) {
         const lineaAncho = doc.getTextWidth(nombreLineas[i])
         doc.text(nombreLineas[i], innerX + (innerWidth - lineaAncho) / 2, currentY)
-        currentY += nombreFontSize * 0.35 // Interlineado proporcional
+        currentY += nombreFontSize * 0.32
       }
 
       // CARGO (si existe, más grande que antes)
       if (asistente.cargo && asistente.cargo.trim() !== '') {
-        currentY += 4 // Espacio entre nombre y cargo
+        currentY += 2
         
         doc.setFont('helvetica', 'normal')
         
-        // Tamaño más grande para el cargo
-        let cargoFontSize = 12
+        // Tamaño mucho más grande para el cargo
+        let cargoFontSize = 18
         
         // Ajustar tamaño de fuente para que quepa en el ancho
         doc.setFontSize(cargoFontSize)
-        while (doc.getTextWidth(asistente.cargo) > innerWidth - 2 && cargoFontSize > 6) {
-          cargoFontSize -= 1
+        while (doc.getTextWidth(asistente.cargo) > innerWidth - 1 && cargoFontSize > 8) {
+          cargoFontSize -= 0.5
           doc.setFontSize(cargoFontSize)
         }
         
-        const cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 2)
-        const lineaAncho = doc.getTextWidth(cargoLineas[0]) // Solo mostrar primera línea
+        const cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
+        const lineaAncho = doc.getTextWidth(cargoLineas[0])
         doc.text(cargoLineas[0], innerX + (innerWidth - lineaAncho) / 2, currentY)
       }
     }

@@ -97,21 +97,21 @@ body {
 }
 
 .escarapela-sin-borde .nombre-grande {
-  font-size: 32px;
+  font-size: 48px;
   font-weight: bold;
   text-align: center;
-  line-height: 1.1;
+  line-height: 0.9;
   margin: 0;
   color: #000;
 }
 
 .escarapela-sin-borde .cargo-grande {
-  font-size: 20px;
+  font-size: 28px;
   font-weight: normal;
   text-align: center;
-  margin-top: 8px;
+  margin-top: 4px;
   color: #333;
-  line-height: 1.2;
+  line-height: 1.0;
 }
 
 @media print {
