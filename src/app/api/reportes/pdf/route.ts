@@ -109,13 +109,13 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
       doc.setFontSize(cargoFontSize)
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 2)
-      alturaCargoTotal = cargoFontSize * 0.352778 + 8  // Más espaciado entre nombre y cargo
+      alturaCargoTotal = cargoFontSize * 0.352778 + 2  // Espaciado mínimo entre nombre y cargo
     }
     
-    // Calcular posición vertical centrada en el área
+    // Calcular posición vertical centrada en el área + 0.7cm más abajo
     const alturaContenidoTotal = alturaNombre + alturaCargoTotal
     const centroVertical = areaTexto.y + (areaTexto.height / 2)
-    let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7)
+    let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7) + 7  // +7mm (0.7cm) más abajo
     
     // Dibujar nombre
     doc.setFont('helvetica', 'bold')
@@ -128,7 +128,7 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
 
     // Dibujar cargo
     if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
-      currentY += 8  // Mayor separación entre nombre y cargo
+      currentY += 2  // Separación mínima entre nombre y cargo
       
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(cargoFontSize)
