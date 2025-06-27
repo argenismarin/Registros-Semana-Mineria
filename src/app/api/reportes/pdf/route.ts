@@ -187,6 +187,7 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     creator: ''
   })
 
+  
   // Función para dibujar una escarapela
   const dibujarEscarapela = (asistente: Asistente, x: number, y: number) => {
     // Área completa disponible con padding mínimo
