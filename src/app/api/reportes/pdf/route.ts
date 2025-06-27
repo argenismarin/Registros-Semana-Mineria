@@ -48,10 +48,10 @@ async function generarPDFEscarapelas(asistentes: Asistente[]) {
   
   // Área de texto según las medidas proporcionadas
   const areaTexto = {
-    x: 14,        // 1.4cm desde la izquierda
-    y: 62.5,      // 6.25cm desde arriba
-    width: 56,    // desde 1.4cm hasta 7cm = 5.6cm
-    height: 40.5  // desde 6.25cm hasta 2.5cm del final = 4.05cm
+    x: 16,        // 1.6cm desde la izquierda (antes 1.4cm)
+    y: 58,        // 5.8cm desde arriba (antes 6.25cm) 
+    width: 54,    // desde 1.6cm hasta 7cm = 5.4cm (antes 5.6cm)
+    height: 44.5  // desde 5.8cm hasta 2.5cm del final = 4.45cm (antes 4.05cm)
   }
 
   const doc = new jsPDF({
