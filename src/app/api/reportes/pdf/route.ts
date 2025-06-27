@@ -45,7 +45,18 @@ export async function POST(request: NextRequest) {
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
+      compress: false,
+      userUnit: 1.0
+    })
+
+    // Limpiar cualquier configuración automática de metadatos
+    doc.setProperties({
+      title: '',
+      subject: '',
+      author: '',
+      keywords: '',
+      creator: ''
     })
 
     // Función para dibujar una escarapela
@@ -165,7 +176,15 @@ export async function POST(request: NextRequest) {
       asistenteIndex++
     }
 
-    // Pie de página removido para escarapelas limpias
+    // Asegurar que no hay elementos adicionales en el PDF
+    
+    // Limpiar todas las páginas de cualquier elemento automático
+    const totalPages = doc.internal.pages.length - 1
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i)
+      // Asegurar que no hay texto adicional
+      doc.setFontSize(0)
+    }
 
     // Generar buffer del PDF
     const pdfBuffer = doc.output('arraybuffer')
