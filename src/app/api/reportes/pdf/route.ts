@@ -48,10 +48,10 @@ async function generarPDFEscarapelas(asistentes: Asistente[]) {
   
   // Área de texto según las medidas proporcionadas
   const areaTexto = {
-    x: 16,        // 1.6cm desde la izquierda (antes 1.4cm)
-    y: 58,        // 5.8cm desde arriba (antes 6.25cm) 
-    width: 54,    // desde 1.6cm hasta 7cm = 5.4cm (antes 5.6cm)
-    height: 44.5  // desde 5.8cm hasta 2.5cm del final = 4.45cm (antes 4.05cm)
+    x: 21,        // 2.1cm desde la izquierda (0.5cm más a la derecha)
+    y: 58,        // 5.8cm desde arriba
+    width: 49,    // desde 2.1cm hasta 7cm = 4.9cm
+    height: 44.5  // desde 5.8cm hasta 2.5cm del final = 4.45cm
   }
 
   const doc = new jsPDF({
@@ -77,8 +77,8 @@ async function generarPDFEscarapelas(asistentes: Asistente[]) {
     // NOMBRE DEL ASISTENTE
     doc.setFont('helvetica', 'bold')
     
-    // Ajustar tamaño de fuente para el área disponible
-    let nombreFontSize = 16
+    // Ajustar tamaño de fuente para el área disponible (empezamos más grande)
+    let nombreFontSize = 20  // Aumentado de 16 a 20
     const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
@@ -101,7 +101,7 @@ async function generarPDFEscarapelas(asistentes: Asistente[]) {
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
       doc.setFont('helvetica', 'normal')
-      cargoFontSize = 12
+      cargoFontSize = 15  // Aumentado de 12 a 15
       
       doc.setFontSize(cargoFontSize)
       while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 2 && cargoFontSize > 6) {
