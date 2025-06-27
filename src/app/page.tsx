@@ -487,215 +487,206 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                📋 Sistema de Registro de Eventos
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col gap-4 sm:gap-0 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-center sm:text-left">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                📋 Sistema de Registro
               </h1>
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
                 Gestión de asistentes y control de asistencia
               </p>
             </div>
             
-            <div className="mt-4 sm:mt-0 flex gap-2">
+            <div className="mt-4 sm:mt-0 flex flex-col sm:flex-row gap-3 sm:gap-2">
               <Link
                 href="/escarapelas"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center justify-center px-4 py-3 sm:py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full sm:w-auto"
               >
                 🏷️ Escarapelas
               </Link>
-              <Link
-                href="/test-qr-scanner"
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                🧪 Página de Pruebas
-              </Link>
-              {(estadoGoogleSheets === 'configurado' || estadoGoogleSheets === 'sincronizando') && (
-                <button
-                  onClick={sincronizarGoogleSheets}
-                  disabled={estadoGoogleSheets === 'sincronizando'}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {estadoGoogleSheets === 'sincronizando' ? '🔄' : '📊'} Sincronizar
-                </button>
-              )}
               <button
                 onClick={() => setMostrarCamara(true)}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="inline-flex items-center justify-center px-4 py-3 sm:py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 w-full sm:w-auto"
               >
                 📱 Escanear QR
               </button>
             </div>
           </div>
 
-          {/* Indicador de estado */}
-          <div className="mt-4 flex items-center gap-4 text-sm">
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-              estadoSincronizacion === 'sincronizado' 
-                ? 'bg-green-100 text-green-700' 
-                : estadoSincronizacion === 'sincronizando'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              {estadoSincronizacion === 'sincronizado' && '✅'}
-              {estadoSincronizacion === 'sincronizando' && '🔄'}
-              {estadoSincronizacion === 'error' && '❌'}
-              <span className="capitalize">{estadoSincronizacion}</span>
+          {/* Indicadores de estado - Optimizado para móviles */}
+          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 text-sm">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-full ${
+                estadoSincronizacion === 'sincronizado' 
+                  ? 'bg-green-100 text-green-700' 
+                  : estadoSincronizacion === 'sincronizando'
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {estadoSincronizacion === 'sincronizado' && '✅'}
+                {estadoSincronizacion === 'sincronizando' && '🔄'}
+                {estadoSincronizacion === 'error' && '❌'}
+                <span className="capitalize">{estadoSincronizacion}</span>
+              </div>
+              
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-full ${
+                estadoGoogleSheets === 'configurado' 
+                  ? 'bg-purple-100 text-purple-700' 
+                  : estadoGoogleSheets === 'sincronizando'
+                  ? 'bg-blue-100 text-blue-700'
+                  : estadoGoogleSheets === 'no-configurado'
+                  ? 'bg-gray-100 text-gray-700'
+                  : 'bg-red-100 text-red-700'
+              }`}>
+                {estadoGoogleSheets === 'configurado' && '📊'}
+                {estadoGoogleSheets === 'sincronizando' && '🔄'}
+                {estadoGoogleSheets === 'no-configurado' && '📋'}
+                {estadoGoogleSheets === 'error' && '❌'}
+                <span className="hidden sm:inline">
+                  {estadoGoogleSheets === 'configurado' && 'Google Sheets'}
+                  {estadoGoogleSheets === 'sincronizando' && 'Sincronizando...'}
+                  {estadoGoogleSheets === 'no-configurado' && 'Sin Google Sheets'}
+                  {estadoGoogleSheets === 'error' && 'Error Sheets'}
+                </span>
+                <span className="sm:hidden">
+                  {estadoGoogleSheets === 'configurado' && 'Sheets OK'}
+                  {estadoGoogleSheets === 'sincronizando' && 'Sync...'}
+                  {estadoGoogleSheets === 'no-configurado' && 'Sin Sheets'}
+                  {estadoGoogleSheets === 'error' && 'Error'}
+                </span>
+              </div>
             </div>
             
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-              estadoGoogleSheets === 'configurado' 
-                ? 'bg-purple-100 text-purple-700' 
-                : estadoGoogleSheets === 'sincronizando'
-                ? 'bg-blue-100 text-blue-700'
-                : estadoGoogleSheets === 'no-configurado'
-                ? 'bg-gray-100 text-gray-700'
-                : 'bg-red-100 text-red-700'
-            }`}>
-              {estadoGoogleSheets === 'configurado' && '📊'}
-              {estadoGoogleSheets === 'sincronizando' && '🔄'}
-              {estadoGoogleSheets === 'no-configurado' && '📋'}
-              {estadoGoogleSheets === 'error' && '❌'}
-              <span>
-                {estadoGoogleSheets === 'configurado' && 'Google Sheets'}
-                {estadoGoogleSheets === 'sincronizando' && 'Sincronizando...'}
-                {estadoGoogleSheets === 'no-configurado' && 'Sin Google Sheets'}
-                {estadoGoogleSheets === 'error' && 'Error Sheets'}
-              </span>
-            </div>
-            
-            <span className="text-gray-500">Cliente: {clienteId.slice(-6)}</span>
-            
-            {ultimaSincronizacion && (
-              <span className="text-gray-500">
-                Última sync: {new Date(ultimaSincronizacion).toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Estadísticas */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">👥</div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total</dt>
-                    <dd className="text-lg font-medium text-gray-900">{estadisticas.total}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">✅</div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Presentes</dt>
-                    <dd className="text-lg font-medium text-gray-900">{estadisticas.presentes}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">⏳</div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Pendientes</dt>
-                    <dd className="text-lg font-medium text-gray-900">{estadisticas.pendientes}</dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="text-2xl">🖨️</div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Escarapelas</dt>
-                    <dd className="text-lg font-medium text-gray-900">{estadisticas.escarapelasImpresas}</dd>
-                  </dl>
-                </div>
-              </div>
+            <div className="hidden lg:flex items-center gap-4 text-gray-500">
+              <span>Cliente: {clienteId.slice(-6)}</span>
+              {ultimaSincronizacion && (
+                <span>
+                  Última sync: {new Date(ultimaSincronizacion).toLocaleTimeString()}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Formulario de registro */}
-          <div className="lg:col-span-1">
-            <div className="bg-white shadow-sm rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-medium text-gray-900">➕ Registrar Asistente</h2>
+        {/* Estadísticas - Optimizadas para móviles */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6 lg:mb-8">
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl lg:text-3xl">👥</div>
+                </div>
+                <div className="ml-3 lg:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs lg:text-sm font-medium text-gray-500 truncate">Total</dt>
+                    <dd className="text-lg lg:text-xl font-bold text-gray-900">{estadisticas.total}</dd>
+                  </dl>
+                </div>
               </div>
-              <div className="px-6 py-4">
-                <RegistroForm onAgregarAsistente={agregarAsistente} />
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl lg:text-3xl">✅</div>
+                </div>
+                <div className="ml-3 lg:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs lg:text-sm font-medium text-gray-500 truncate">Presentes</dt>
+                    <dd className="text-lg lg:text-xl font-bold text-green-600">{estadisticas.presentes}</dd>
+                  </dl>
+                </div>
               </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl lg:text-3xl">⏳</div>
+                </div>
+                <div className="ml-3 lg:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs lg:text-sm font-medium text-gray-500 truncate">Pendientes</dt>
+                    <dd className="text-lg lg:text-xl font-bold text-orange-600">{estadisticas.pendientes}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white overflow-hidden shadow-sm rounded-lg">
+            <div className="p-4 lg:p-5">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <div className="text-2xl lg:text-3xl">🖨️</div>
+                </div>
+                <div className="ml-3 lg:ml-5 w-0 flex-1">
+                  <dl>
+                    <dt className="text-xs lg:text-sm font-medium text-gray-500 truncate">Escarapelas</dt>
+                    <dd className="text-lg lg:text-xl font-bold text-blue-600">{estadisticas.escarapelasImpresas}</dd>
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-6 lg:space-y-8">
+          {/* Formulario de registro - Prioritario en móviles */}
+          <div className="bg-white shadow-sm rounded-lg">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900">➕ Registrar Asistente</h2>
+            </div>
+            <div className="px-4 sm:px-6 py-4">
+              <RegistroForm onAgregarAsistente={agregarAsistente} />
             </div>
           </div>
 
           {/* Lista de asistentes */}
-          <div className="lg:col-span-2">
-            <div className="bg-white shadow-sm rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <h2 className="text-lg font-medium text-gray-900">👥 Lista de Asistentes</h2>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2">
+          <div className="bg-white shadow-sm rounded-lg">
+            <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
+              <div className="flex flex-col gap-4">
+                <h2 className="text-lg font-medium text-gray-900">👥 Lista de Asistentes</h2>
+                
+                {/* Filtros optimizados para móviles */}
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="🔍 Buscar asistentes..."
+                    value={filtro}
+                    onChange={(e) => setFiltro(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <label className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-md">
                     <input
-                      type="text"
-                      placeholder="Buscar asistentes..."
-                      value={filtro}
-                      onChange={(e) => setFiltro(e.target.value)}
-                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      type="checkbox"
+                      checked={mostrarSoloPendientes}
+                      onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
+                      className="mr-3 w-4 h-4 rounded"
                     />
-                    <label className="flex items-center text-sm text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={mostrarSoloPendientes}
-                        onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
-                        className="mr-2 rounded"
-                      />
-                      Solo pendientes
-                    </label>
-                  </div>
+                    Mostrar solo pendientes
+                  </label>
                 </div>
               </div>
-              
-              <div className="px-6 py-4">
-                <ListaAsistentes
-                  asistentes={asistentesFiltrados}
-                  onMarcarAsistencia={marcarAsistencia}
-                  onImprimirEscarapela={imprimirEscarapela}
-                  onGenerarQR={generarQRAsistente}
-                  onEditarAsistente={editarAsistente}
-                  onEliminarAsistente={eliminarAsistente}
-                  loading={loading}
-                />
-              </div>
+            </div>
+            
+            <div className="px-2 sm:px-6 py-4">
+              <ListaAsistentes
+                asistentes={asistentesFiltrados}
+                onMarcarAsistencia={marcarAsistencia}
+                onImprimirEscarapela={imprimirEscarapela}
+                onGenerarQR={generarQRAsistente}
+                onEditarAsistente={editarAsistente}
+                onEliminarAsistente={eliminarAsistente}
+                loading={loading}
+              />
             </div>
           </div>
         </div>

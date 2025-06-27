@@ -80,9 +80,9 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="nombre" className="block text-sm font-medium text-gray-700 mb-2">
           Nombre completo *
         </label>
         <input
@@ -92,13 +92,13 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
           value={formData.nombre}
           onChange={handleChange}
           required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 text-base"
           placeholder="Ingrese el nombre completo"
         />
       </div>
 
       <div>
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
           Email
         </label>
         <input
@@ -107,13 +107,13 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
           name="email"
           value={formData.email}
           onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 text-base"
           placeholder="correo@ejemplo.com"
         />
       </div>
 
       <div>
-        <label htmlFor="cargo" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="cargo" className="block text-sm font-medium text-gray-700 mb-2">
           Modalidad *
         </label>
         <select
@@ -122,7 +122,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
           value={formData.cargo}
           onChange={handleChange}
           required
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 text-base"
         >
           <option value="">Seleccione una modalidad...</option>
           {opcionesCargo.map((cargo) => (
@@ -134,7 +134,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
       </div>
 
       <div>
-        <label htmlFor="empresa" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="empresa" className="block text-sm font-medium text-gray-700 mb-2">
           Empresa/Organización
         </label>
         <input
@@ -143,7 +143,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
           name="empresa"
           value={formData.empresa}
           onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 text-base"
           placeholder="Nombre de la empresa"
         />
       </div>
@@ -151,9 +151,9 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-2 px-4 rounded-md transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 text-base"
       >
-        {loading ? 'Registrando...' : 'Registrar Asistente'}
+        {loading ? '🔄 Registrando...' : '➕ Registrar Asistente'}
       </button>
     </form>
   )
