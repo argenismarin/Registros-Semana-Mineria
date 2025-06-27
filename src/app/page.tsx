@@ -49,17 +49,25 @@ export default function Home() {
     setClienteId(`cliente-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`)
   }, [])
 
-  const asistentesFiltrados = asistentes.filter(asistente => {
-    const coincideFiltro = !filtro || 
-      asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
-      (asistente.email && asistente.email.toLowerCase().includes(filtro.toLowerCase())) ||
-      (asistente.cargo && asistente.cargo.toLowerCase().includes(filtro.toLowerCase())) ||
-      (asistente.empresa && asistente.empresa.toLowerCase().includes(filtro.toLowerCase()))
-    
-    const coincidePendiente = !mostrarSoloPendientes || !asistente.presente
-    
-    return coincideFiltro && coincidePendiente
-  })
+  const asistentesFiltrados = asistentes
+    .filter(asistente => {
+      const coincideFiltro = !filtro || 
+        asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
+        (asistente.email && asistente.email.toLowerCase().includes(filtro.toLowerCase())) ||
+        (asistente.cargo && asistente.cargo.toLowerCase().includes(filtro.toLowerCase())) ||
+        (asistente.empresa && asistente.empresa.toLowerCase().includes(filtro.toLowerCase()))
+      
+      const coincidePendiente = !mostrarSoloPendientes || !asistente.presente
+      
+      return coincideFiltro && coincidePendiente
+    })
+    .sort((a, b) => {
+      // Ordenar alfabéticamente por nombre (ignorando mayúsculas/minúsculas)
+      return a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase(), 'es', {
+        sensitivity: 'base',
+        numeric: true
+      })
+    })
 
   // Función helper para operaciones con timeout
   const ejecutarConTimeout = async (
