@@ -52,16 +52,14 @@ export default function EscarapelasPage() {
     cargarAsistentes()
   }, [])
 
-  // Debug: Mostrar información de asistentes en consola
+  // Debug: Mostrar información de asistentes en consola (temporal)
   useEffect(() => {
-    console.log('🔍 Estado actual:')
-    console.log('- Asistentes cargados:', asistentes.length)
-    console.log('- Asistentes filtrados:', asistentesFiltrados.length)
-    console.log('- Loading:', loading)
     if (asistentes.length > 0) {
-      console.log('- Primer asistente:', asistentes[0])
+      console.log(`✅ Escarapelas: ${asistentes.length} asistentes disponibles`)
+    } else if (!loading) {
+      console.log('⚠️ Escarapelas: No hay asistentes disponibles')
     }
-  }, [asistentes, asistentesFiltrados, loading])
+  }, [asistentes, loading])
 
   // Aplicar filtros
   useEffect(() => {
@@ -87,20 +85,18 @@ export default function EscarapelasPage() {
   }, [asistentes, filtroNombre, filtroEmpresa, soloSeleccionados, asistentesSeleccionados])
 
   const cargarAsistentes = async () => {
-    console.log('🔄 Cargando asistentes...')
     try {
-      const response = await fetch('/api/asistentes')
-      console.log('📡 Respuesta API:', response.status, response.statusText)
+      const response = await fetch('/api/asistentes', {
+        headers: {
+          'Cache-Control': 'no-cache'
+        }
+      })
       
       if (response.ok) {
-        const data = await response.json()
-        console.log('📋 Datos recibidos:', data)
+        const data: Asistente[] = await response.json()
+        setAsistentes(data)
         
-        const asistentesData = data.asistentes || []
-        setAsistentes(asistentesData)
-        console.log(`✅ ${asistentesData.length} asistentes cargados`)
-        
-        if (asistentesData.length === 0) {
+        if (data.length === 0) {
           toast.info('No hay asistentes registrados. Ve a la página principal para registrar asistentes.')
         }
       } else {
@@ -112,7 +108,6 @@ export default function EscarapelasPage() {
       toast.error('Error de conexión al cargar asistentes')
     } finally {
       setLoading(false)
-      console.log('🏁 Carga finalizada')
     }
   }
 
