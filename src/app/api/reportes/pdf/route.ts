@@ -55,11 +55,11 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
   const escarapelaWidth = 98  // mm
   const escarapelaHeight = 128 // mm
   
-  // Área de texto según las medidas proporcionadas (POSICIÓN FIJA)
+  // Área de texto expandida horizontalmente para más impacto
   const areaTexto = {
-    x: 26,        // 2.6cm desde la izquierda (otros 0.5cm más a la derecha)
-    y: 53,        // 5.3cm desde arriba
-    width: 44,    // desde 2.6cm hasta 7cm = 4.4cm
+    x: 16,        // 1.6cm desde la izquierda (1cm más a la izquierda)
+    y: 53,        // 5.3cm desde arriba (POSICIÓN VERTICAL FIJA)
+    width: 64,    // 6.4cm de ancho (2cm más ancho total)
     height: 49.5  // desde 5.3cm hasta 2.5cm del final = 4.95cm
   }
 
@@ -86,18 +86,18 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     // NOMBRE DEL ASISTENTE
     doc.setFont('helvetica', 'bold')
     
-    // Tamaño de fuente base optimizado para el área disponible
-    let nombreFontSize = 32  // Tamaño base más grande para usar el espacio
+    // Tamaño de fuente base más grande para mayor impacto visual
+    let nombreFontSize = 40  // Tamaño base aumentado para aprovechar el área expandida
     const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
-    while (doc.getTextWidth(nombreCompleto) > areaTexto.width - 4 && nombreFontSize > 12) {
+    while (doc.getTextWidth(nombreCompleto) > areaTexto.width - 2 && nombreFontSize > 14) {
       nombreFontSize -= 0.5
       doc.setFontSize(nombreFontSize)
     }
     
     // Dividir nombre en líneas si es necesario
-    const nombreLineas = doc.splitTextToSize(nombreCompleto, areaTexto.width - 4)
+    const nombreLineas = doc.splitTextToSize(nombreCompleto, areaTexto.width - 2)
     const numeroLineasNombre = Math.min(nombreLineas.length, 3)  // Permitir hasta 3 líneas para nombres largos
     
     // Calcular altura del nombre
@@ -110,15 +110,15 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
       doc.setFont('helvetica', 'normal')
-      cargoFontSize = 22  // Tamaño base más grande para el cargo
+      cargoFontSize = 28  // Tamaño base aumentado proporcional al nombre
       
       doc.setFontSize(cargoFontSize)
-      while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 4 && cargoFontSize > 8) {
+      while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 2 && cargoFontSize > 10) {
         cargoFontSize -= 0.5
         doc.setFontSize(cargoFontSize)
       }
       
-      cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 4)
+      cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 2)
       alturaCargoTotal = cargoFontSize * 0.352778 + 8  // Más espaciado entre nombre y cargo
     }
     
