@@ -55,12 +55,12 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
   const escarapelaWidth = 98  // mm
   const escarapelaHeight = 128 // mm
   
-  // Área de texto optimizada para usar máximo espacio disponible
+  // Área de texto según las medidas proporcionadas (POSICIÓN FIJA)
   const areaTexto = {
-    x: 8,         // 0.8cm desde la izquierda (margen mínimo)
-    y: 30,        // 3cm desde arriba 
-    width: 82,    // 8.2cm de ancho (máximo aprovechamiento)
-    height: 70    // 7cm de altura (máximo aprovechamiento)
+    x: 26,        // 2.6cm desde la izquierda (otros 0.5cm más a la derecha)
+    y: 53,        // 5.3cm desde arriba
+    width: 44,    // desde 2.6cm hasta 7cm = 4.4cm
+    height: 49.5  // desde 5.3cm hasta 2.5cm del final = 4.95cm
   }
 
   const doc = new jsPDF({
