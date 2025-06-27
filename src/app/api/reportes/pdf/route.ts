@@ -109,7 +109,8 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
       doc.setFontSize(cargoFontSize)
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 2)
-      alturaCargoTotal = cargoFontSize * 0.352778 + 0.5  // Espaciado ultra mínimo entre nombre y cargo
+      // Calcular altura considerando todas las líneas del cargo
+      alturaCargoTotal = (cargoLineas.length * cargoFontSize * 0.352778 * 0.9) + 0.5  // Espaciado ultra mínimo entre nombre y cargo
     }
     
     // Calcular posición vertical centrada en el área + 0.7cm más abajo - 0.5cm más arriba - un poquito más arriba
@@ -126,14 +127,18 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
       currentY += nombreFontSize * 0.352778 * 0.9
     }
 
-    // Dibujar cargo
+    // Dibujar cargo (todas las líneas)
     if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
       currentY += 0.5  // Separación ultra mínima entre nombre y cargo
       
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(cargoFontSize)
       
-      doc.text(cargoLineas[0], centroHorizontal, currentY, { align: 'center' })
+      // Dibujar todas las líneas del cargo
+      for (let i = 0; i < cargoLineas.length; i++) {
+        doc.text(cargoLineas[i], centroHorizontal, currentY, { align: 'center' })
+        currentY += cargoFontSize * 0.352778 * 0.9  // Espaciado entre líneas
+      }
     }
   }
 
@@ -226,7 +231,8 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
       doc.setFontSize(cargoFontSize)
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
-      alturaCargoTotal = cargoFontSize * 0.352778 + 3
+      // Calcular altura considerando todas las líneas del cargo
+      alturaCargoTotal = (cargoLineas.length * cargoFontSize * 0.352778 * 0.9) + 3
     }
     
     // Calcular la altura total del contenido
@@ -246,14 +252,18 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
       currentY += nombreFontSize * 0.352778 * 0.9
     }
 
-    // CARGO (si existe) - CENTRADO HORIZONTALMENTE
+    // CARGO (si existe) - CENTRADO HORIZONTALMENTE (todas las líneas)
     if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
       currentY += 3
       
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(cargoFontSize)
       
-      doc.text(cargoLineas[0], centroHorizontal, currentY, { align: 'center' })
+      // Dibujar todas las líneas del cargo
+      for (let i = 0; i < cargoLineas.length; i++) {
+        doc.text(cargoLineas[i], centroHorizontal, currentY, { align: 'center' })
+        currentY += cargoFontSize * 0.352778 * 0.9  // Espaciado entre líneas
+      }
     }
   }
 
