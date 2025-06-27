@@ -55,12 +55,12 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
   const escarapelaWidth = 98  // mm
   const escarapelaHeight = 128 // mm
   
-  // Área de texto según las medidas proporcionadas
+  // Área de texto optimizada para usar máximo espacio disponible
   const areaTexto = {
-    x: 26,        // 2.6cm desde la izquierda (otros 0.5cm más a la derecha)
-    y: 53,        // 5.3cm desde arriba
-    width: 44,    // desde 2.6cm hasta 7cm = 4.4cm
-    height: 49.5  // desde 5.3cm hasta 2.5cm del final = 4.95cm
+    x: 8,         // 0.8cm desde la izquierda (margen mínimo)
+    y: 30,        // 3cm desde arriba 
+    width: 82,    // 8.2cm de ancho (máximo aprovechamiento)
+    height: 70    // 7cm de altura (máximo aprovechamiento)
   }
 
   const doc = new jsPDF({
@@ -86,19 +86,19 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     // NOMBRE DEL ASISTENTE
     doc.setFont('helvetica', 'bold')
     
-    // Ajustar tamaño de fuente para el área disponible (empezamos más grande)
-    let nombreFontSize = 20  // Aumentado de 16 a 20
+    // Tamaño de fuente base optimizado para el área disponible
+    let nombreFontSize = 32  // Tamaño base más grande para usar el espacio
     const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
-    while (doc.getTextWidth(nombreCompleto) > areaTexto.width - 2 && nombreFontSize > 8) {
+    while (doc.getTextWidth(nombreCompleto) > areaTexto.width - 4 && nombreFontSize > 12) {
       nombreFontSize -= 0.5
       doc.setFontSize(nombreFontSize)
     }
     
     // Dividir nombre en líneas si es necesario
-    const nombreLineas = doc.splitTextToSize(nombreCompleto, areaTexto.width - 2)
-    const numeroLineasNombre = Math.min(nombreLineas.length, 2)
+    const nombreLineas = doc.splitTextToSize(nombreCompleto, areaTexto.width - 4)
+    const numeroLineasNombre = Math.min(nombreLineas.length, 3)  // Permitir hasta 3 líneas para nombres largos
     
     // Calcular altura del nombre
     const alturaNombre = numeroLineasNombre * (nombreFontSize * 0.352778)
@@ -110,16 +110,16 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
       doc.setFont('helvetica', 'normal')
-      cargoFontSize = 15  // Aumentado de 12 a 15
+      cargoFontSize = 22  // Tamaño base más grande para el cargo
       
       doc.setFontSize(cargoFontSize)
-      while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 2 && cargoFontSize > 6) {
+      while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 4 && cargoFontSize > 8) {
         cargoFontSize -= 0.5
         doc.setFontSize(cargoFontSize)
       }
       
-      cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 2)
-      alturaCargoTotal = cargoFontSize * 0.352778 + 3
+      cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 4)
+      alturaCargoTotal = cargoFontSize * 0.352778 + 8  // Más espaciado entre nombre y cargo
     }
     
     // Calcular posición vertical centrada en el área
@@ -138,7 +138,7 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
 
     // Dibujar cargo
     if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
-      currentY += 3
+      currentY += 8  // Mayor separación entre nombre y cargo
       
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(cargoFontSize)
