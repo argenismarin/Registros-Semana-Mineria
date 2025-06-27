@@ -5,7 +5,7 @@ import { toast } from 'react-toastify'
 import RegistroForm from '@/components/RegistroForm'
 import ListaAsistentes from '@/components/ListaAsistentes'
 import QRScanner from '@/components/QRScanner'
-import SelectorPosicionEscarapela from '@/components/SelectorPosicionEscarapela'
+
 import Link from 'next/link'
 
 interface Asistente {
@@ -29,7 +29,7 @@ export default function Home() {
   const [mostrarCamara, setMostrarCamara] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
-  const [asistenteParaEscarapela, setAsistenteParaEscarapela] = useState<Asistente | null>(null)
+
   const [estadoGoogleSheets, setEstadoGoogleSheets] = useState<'configurado' | 'no-configurado' | 'sincronizando' | 'error'>('no-configurado')
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState<string | null>(null)
   
@@ -247,32 +247,16 @@ export default function Home() {
   }
 
   const imprimirEscarapela = async (asistente: Asistente) => {
-    // Abrir modal de selección de posición
-    setAsistenteParaEscarapela(asistente)
-  }
-
-  const confirmarImpresionEscarapela = async (posicion: number) => {
-    if (!asistenteParaEscarapela || isUpdatingRef.current) {
+    if (isUpdatingRef.current) {
+      toast.warning('Operación en progreso, espera...')
       return
     }
 
     try {
       isUpdatingRef.current = true
-      console.log('🖨️ Generando PDF de escarapela para:', asistenteParaEscarapela.nombre, 'en posición:', posicion + 1)
+      console.log('🖨️ Generando escarapela individual para:', asistente.nombre)
 
-      // Obtener configuración del evento
-      let eventoNombre = 'EVENTO'
-      try {
-        const configResponse = await fetch('/api/evento/configuracion')
-        if (configResponse.ok) {
-          const config = await configResponse.json()
-          eventoNombre = config.nombre || 'EVENTO'
-        }
-      } catch (error) {
-        console.log('⚠️ No se pudo obtener configuración del evento, usando nombre por defecto')
-      }
-
-      // Generar PDF usando el sistema de escarapelas
+      // Generar PDF individual (98mm × 128mm)
       const response = await ejecutarConTimeout(
         () => fetch('/api/reportes/pdf', {
           method: 'POST',
@@ -280,16 +264,13 @@ export default function Home() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            asistentes: [asistenteParaEscarapela],
+            asistentes: [asistente],
             opciones: {
-              posicionesSeleccionadas: [posicion], // Posición seleccionada
-              eventoNombre: eventoNombre,
-              mostrarCargo: !!asistenteParaEscarapela.cargo,
-              mostrarEmpresa: !!asistenteParaEscarapela.empresa
+              modoImpresion: 'individual'
             }
           })
         }),
-        'Generar PDF de escarapela'
+        'Generar escarapela individual'
       )
 
       if (!response.ok) {
@@ -301,14 +282,14 @@ export default function Home() {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `escarapela-${asistenteParaEscarapela.nombre.replace(/\s+/g, '-').toLowerCase()}-pos${posicion + 1}-${new Date().toISOString().split('T')[0]}.pdf`
+      link.download = `escarapela-${asistente.nombre.replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
       // Marcar como impresa en el backend
-      const marcarResponse = await fetch(`/api/asistentes/${asistenteParaEscarapela.id}/imprimir`, {
+      const marcarResponse = await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
         method: 'POST',
         headers: {
           'X-Cliente-ID': clienteId
@@ -320,15 +301,12 @@ export default function Home() {
         if (resultado.success && resultado.asistente) {
           // Actualización optimista
           setAsistentes(prev => 
-            prev.map(a => a.id === asistenteParaEscarapela.id ? resultado.asistente : a)
+            prev.map(a => a.id === asistente.id ? resultado.asistente : a)
           )
         }
       }
 
-      toast.success(`🖨️ PDF de escarapela de ${asistenteParaEscarapela.nombre} generado en posición ${posicion + 1}`)
-      
-      // Cerrar modal
-      setAsistenteParaEscarapela(null)
+      toast.success(`🖨️ Escarapela individual de ${asistente.nombre} generada (98mm×128mm)`)
       
       // Programar recarga
       setTimeout(() => cargarAsistentes(), 500)
@@ -728,13 +706,7 @@ export default function Home() {
           />
         )}
 
-        {asistenteParaEscarapela && (
-          <SelectorPosicionEscarapela
-            asistente={asistenteParaEscarapela}
-            onConfirmar={confirmarImpresionEscarapela}
-            onCancelar={() => setAsistenteParaEscarapela(null)}
-          />
-        )}
+
       </div>
     </div>
   )
