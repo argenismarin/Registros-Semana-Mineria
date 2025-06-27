@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
       const innerWidth = escarapelaWidth - (padding * 2)
       const innerHeight = escarapelaHeight - (padding * 2)
 
-      // Calcular el centro vertical del área disponible
-      const centerY = y + (escarapelaHeight / 2)
+      // Calcular el centro horizontal del área
+      const centroHorizontal = x + (escarapelaWidth / 2)
 
       // NOMBRE DEL ASISTENTE (lo más grande posible)
       doc.setFont('helvetica', 'bold')
@@ -78,44 +78,54 @@ export async function POST(request: NextRequest) {
       const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 1)
       const numeroLineasNombre = Math.min(nombreLineas.length, 2)
       
-      // Posición Y inicial para centrar verticalmente todo el contenido
-      let currentY
-      if (asistente.cargo && asistente.cargo.trim() !== '') {
-        // Si hay cargo, calcular posición para centrar ambos elementos
-        const alturaTotal = (numeroLineasNombre * nombreFontSize * 0.35) + 6
-        currentY = centerY - (alturaTotal / 2) + (nombreFontSize * 0.35)
-      } else {
-        // Si no hay cargo, centrar solo el nombre
-        const alturaTotal = numeroLineasNombre * nombreFontSize * 0.35
-        currentY = centerY - (alturaTotal / 2) + (nombreFontSize * 0.35)
-      }
+      // Calcular altura del nombre en mm
+      const alturaNombre = numeroLineasNombre * (nombreFontSize * 0.352778) // Conversión pt a mm
       
-      // Dibujar líneas del nombre
-      for (let i = 0; i < numeroLineasNombre; i++) {
-        const lineaAncho = doc.getTextWidth(nombreLineas[i])
-        doc.text(nombreLineas[i], innerX + (innerWidth - lineaAncho) / 2, currentY)
-        currentY += nombreFontSize * 0.32
-      }
-
-      // CARGO (si existe, más grande que antes)
+      // Preparar información del cargo
+      let alturaCargoTotal = 0
+      let cargoFontSize = 0
+      let cargoLineas = []
+      
       if (asistente.cargo && asistente.cargo.trim() !== '') {
-        currentY += 2
-        
         doc.setFont('helvetica', 'normal')
+        cargoFontSize = 18
         
-        // Tamaño mucho más grande para el cargo
-        let cargoFontSize = 18
-        
-        // Ajustar tamaño de fuente para que quepa en el ancho
+        // Ajustar tamaño de fuente del cargo
         doc.setFontSize(cargoFontSize)
         while (doc.getTextWidth(asistente.cargo) > innerWidth - 1 && cargoFontSize > 8) {
           cargoFontSize -= 0.5
           doc.setFontSize(cargoFontSize)
         }
         
-        const cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
-        const lineaAncho = doc.getTextWidth(cargoLineas[0])
-        doc.text(cargoLineas[0], innerX + (innerWidth - lineaAncho) / 2, currentY)
+        cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
+        alturaCargoTotal = cargoFontSize * 0.352778 + 3 // Altura del cargo + espacio
+      }
+      
+      // Calcular la altura total del contenido
+      const alturaContenidoTotal = alturaNombre + alturaCargoTotal
+      
+      // Calcular posición Y inicial para centrar todo el contenido
+      const centroVertical = y + (escarapelaHeight / 2)
+      let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7)
+      
+      // Volver a configurar la fuente del nombre
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(nombreFontSize)
+      
+      // Dibujar líneas del nombre (CENTRADAS HORIZONTALMENTE)
+      for (let i = 0; i < numeroLineasNombre; i++) {
+        doc.text(nombreLineas[i], centroHorizontal, currentY, { align: 'center' })
+        currentY += nombreFontSize * 0.352778 * 0.9 // Interlineado ajustado
+      }
+
+      // CARGO (si existe) - CENTRADO HORIZONTALMENTE
+      if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
+        currentY += 3 // Espacio entre nombre y cargo
+        
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(cargoFontSize)
+        
+        doc.text(cargoLineas[0], centroHorizontal, currentY, { align: 'center' })
       }
     }
 
