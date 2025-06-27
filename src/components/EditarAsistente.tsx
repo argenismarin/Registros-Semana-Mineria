@@ -40,6 +40,16 @@ export default function EditarAsistente({
     escarapelaImpresa: asistente.escarapelaImpresa,
     qrGenerado: asistente.qrGenerado || false
   })
+
+  // Opciones de cargo predefinidas
+  const opcionesCargo = [
+    'Asistente',
+    'Muestra Comercial',
+    'Ponente',
+    'Organizador',
+    'Prensa',
+    'Asistente Patrocinador'
+  ]
   
   const [guardando, setGuardando] = useState(false)
   const [eliminando, setEliminando] = useState(false)
@@ -50,6 +60,11 @@ export default function EditarAsistente({
     
     if (!formData.nombre.trim()) {
       toast.error('El nombre es obligatorio')
+      return
+    }
+
+    if (!formData.cargo.trim()) {
+      toast.error('Debe seleccionar un cargo')
       return
     }
 
@@ -127,8 +142,9 @@ export default function EditarAsistente({
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    const checked = (e.target as HTMLInputElement).checked
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -211,15 +227,22 @@ export default function EditarAsistente({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cargo
+                  Cargo *
                 </label>
-                <input
-                  type="text"
+                <select
                   name="cargo"
                   value={formData.cargo}
                   onChange={handleChange}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
-                />
+                >
+                  <option value="">Seleccione un cargo...</option>
+                  {opcionesCargo.map((cargo) => (
+                    <option key={cargo} value={cargo}>
+                      {cargo}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

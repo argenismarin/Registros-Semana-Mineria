@@ -31,11 +31,26 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
   })
   const [loading, setLoading] = useState(false)
 
+  // Opciones de cargo predefinidas
+  const opcionesCargo = [
+    'Asistente',
+    'Muestra Comercial',
+    'Ponente',
+    'Organizador',
+    'Prensa',
+    'Asistente Patrocinador'
+  ]
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!formData.nombre.trim()) {
       toast.error('El nombre es obligatorio')
+      return
+    }
+
+    if (!formData.cargo.trim()) {
+      toast.error('Debe seleccionar un cargo')
       return
     }
 
@@ -57,7 +72,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
     }
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -99,17 +114,23 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
 
       <div>
         <label htmlFor="cargo" className="block text-sm font-medium text-gray-700 mb-1">
-          Cargo
+          Cargo *
         </label>
-        <input
-          type="text"
+        <select
           id="cargo"
           name="cargo"
           value={formData.cargo}
           onChange={handleChange}
+          required
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
-          placeholder="Cargo o posición"
-        />
+        >
+          <option value="">Seleccione un cargo...</option>
+          {opcionesCargo.map((cargo) => (
+            <option key={cargo} value={cargo}>
+              {cargo}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div>
