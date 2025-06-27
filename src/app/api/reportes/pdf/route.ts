@@ -165,21 +165,7 @@ export async function POST(request: NextRequest) {
       asistenteIndex++
     }
 
-    // Agregar información de pie de página
-    const totalPages = doc.internal.pages.length - 1
-    for (let i = 1; i <= totalPages; i++) {
-      doc.setPage(i)
-      doc.setFontSize(6)
-      doc.setFont('helvetica', 'normal')
-      
-      // Información del documento
-      const info = `Escarapelas - ${asistentes.length} asistentes - Página ${i}/${totalPages}`
-      doc.text(info, pageWidth / 2, pageHeight - 2, { align: 'center' })
-      
-      // Fecha de generación
-      const fecha = new Date().toLocaleString('es-ES')
-      doc.text(`Generado: ${fecha}`, 5, pageHeight - 2)
-    }
+    // Pie de página removido para escarapelas limpias
 
     // Generar buffer del PDF
     const pdfBuffer = doc.output('arraybuffer')
