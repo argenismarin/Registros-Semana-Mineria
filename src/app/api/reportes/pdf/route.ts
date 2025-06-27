@@ -112,10 +112,10 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
       alturaCargoTotal = cargoFontSize * 0.352778 + 0.5  // Espaciado ultra mínimo entre nombre y cargo
     }
     
-    // Calcular posición vertical centrada en el área + 0.7cm más abajo - 0.5cm más arriba
+    // Calcular posición vertical centrada en el área + 0.7cm más abajo - 0.5cm más arriba - un poquito más arriba
     const alturaContenidoTotal = alturaNombre + alturaCargoTotal
     const centroVertical = areaTexto.y + (areaTexto.height / 2)
-    let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7) + 7 - 5  // +7mm abajo -5mm arriba (0.5cm)
+    let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7) + 7 - 5 - 3  // +7mm abajo -5mm arriba -3mm más arriba
     
     // Dibujar nombre
     doc.setFont('helvetica', 'bold')
