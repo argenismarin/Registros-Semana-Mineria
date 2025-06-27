@@ -69,10 +69,30 @@ export default function EditarAsistente({
           : asistente.fechaGeneracionQR
       }
 
-      await onGuardar(asistenteActualizado)
-      toast.success('Asistente actualizado correctamente')
+      // Llamar al endpoint de actualización
+      const response = await fetch(`/api/asistentes/${asistente.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(asistenteActualizado)
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Error actualizando asistente')
+      }
+
+      const resultado = await response.json()
+      
+      // Llamar callback para actualizar la UI
+      await onGuardar(resultado.asistente)
+      
+      toast.success('✅ Asistente actualizado y sincronizado con Google Sheets')
+      onCerrar()
     } catch (error) {
-      toast.error('Error actualizando asistente')
+      console.error('Error actualizando asistente:', error)
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     } finally {
       setGuardando(false)
     }
@@ -83,11 +103,24 @@ export default function EditarAsistente({
     
     setEliminando(true)
     try {
+      // Llamar al endpoint de eliminación
+      const response = await fetch(`/api/asistentes/${asistente.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Error eliminando asistente')
+      }
+
+      // Llamar callback para actualizar la UI
       await onEliminar(asistente.id)
-      toast.success('Asistente eliminado correctamente')
+      
+      toast.success('✅ Asistente eliminado y sincronizado con Google Sheets')
       onCerrar()
     } catch (error) {
-      toast.error('Error eliminando asistente')
+      console.error('Error eliminando asistente:', error)
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     } finally {
       setEliminando(false)
       setMostrarConfirmacion(false)
@@ -131,6 +164,16 @@ export default function EditarAsistente({
           >
             ✕
           </button>
+        </div>
+
+        {/* Banner informativo sobre sincronización */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+          <div className="flex items-center gap-2">
+            <div className="text-blue-600">📊</div>
+            <div className="text-sm text-blue-800">
+              <strong>Sincronización automática:</strong> Los cambios se guardarán en memoria local y Google Sheets
+            </div>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -307,7 +350,14 @@ export default function EditarAsistente({
                 disabled={guardando}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium rounded-md transition"
               >
-                {guardando ? '💾 Guardando...' : '💾 Guardar Cambios'}
+                {guardando ? (
+                  <span className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Guardando y sincronizando...
+                  </span>
+                ) : (
+                  '💾 Guardar y Sincronizar'
+                )}
               </button>
               
               <button
@@ -352,7 +402,14 @@ export default function EditarAsistente({
                   disabled={eliminando}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-md transition"
                 >
-                  {eliminando ? 'Eliminando...' : 'Eliminar'}
+                  {eliminando ? (
+                    <span className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Eliminando...
+                    </span>
+                  ) : (
+                    'Eliminar'
+                  )}
                 </button>
               </div>
             </div>

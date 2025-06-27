@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/database'
+import googleSheetsService from '@/lib/googleSheets'
 
 // GET /api/asistentes/[id] - Obtener un asistente específico
 export async function GET(
@@ -44,7 +45,7 @@ export async function PUT(
       )
     }
 
-    // Actualizar asistente
+    // Actualizar asistente en memoria local
     const asistenteActualizado = db.updateAsistente(id, datosActualizacion)
     
     if (!asistenteActualizado) {
@@ -52,6 +53,25 @@ export async function PUT(
         { error: 'Asistente no encontrado' },
         { status: 404 }
       )
+    }
+
+    console.log('✅ Asistente actualizado en memoria:', asistenteActualizado.nombre)
+
+    // 🆕 SINCRONIZAR CON GOOGLE SHEETS
+    if (googleSheetsService.isConfigured()) {
+      try {
+        const syncSuccess = await googleSheetsService.updateAsistente(asistenteActualizado)
+        if (syncSuccess) {
+          console.log('📊 ✅ Cambios sincronizados exitosamente con Google Sheets:', asistenteActualizado.nombre)
+        } else {
+          console.log('📊 ⚠️ Error sincronizando con Google Sheets - continuando')
+        }
+      } catch (error) {
+        console.error('⚠️ Error sincronizando edición con Google Sheets:', error)
+        // No fallar la respuesta por esto, pero logearlo
+      }
+    } else {
+      console.log('⚠️ Google Sheets no configurado, cambios solo en memoria local')
     }
 
     // Notificar a través de Socket.io
@@ -100,7 +120,7 @@ export async function DELETE(
       )
     }
 
-    // Eliminar asistente
+    // Eliminar asistente de memoria local
     const eliminado = db.deleteAsistente(id)
     
     if (!eliminado) {
@@ -108,6 +128,25 @@ export async function DELETE(
         { error: 'No se pudo eliminar el asistente' },
         { status: 500 }
       )
+    }
+
+    console.log('✅ Asistente eliminado de memoria:', asistente.nombre)
+
+    // 🆕 ELIMINAR DE GOOGLE SHEETS
+    if (googleSheetsService.isConfigured()) {
+      try {
+        const deleteSuccess = await googleSheetsService.deleteAsistente(id)
+        if (deleteSuccess) {
+          console.log('📊 ✅ Eliminación sincronizada con Google Sheets:', asistente.nombre)
+        } else {
+          console.log('📊 ⚠️ Error eliminando de Google Sheets - continuando')
+        }
+      } catch (error) {
+        console.error('⚠️ Error sincronizando eliminación con Google Sheets:', error)
+        // No fallar la respuesta por esto, pero logearlo
+      }
+    } else {
+      console.log('⚠️ Google Sheets no configurado, eliminación solo en memoria local')
     }
 
     // Notificar a través de Socket.io

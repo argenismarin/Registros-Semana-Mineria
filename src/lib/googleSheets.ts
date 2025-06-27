@@ -309,6 +309,55 @@ class GoogleSheetsService {
     }
   }
 
+  // Eliminar un asistente de Google Sheets
+  async deleteAsistente(asistenteId: string): Promise<boolean> {
+    try {
+      if (!this.spreadsheetId) {
+        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+        return false
+      }
+
+      const sheets = await this.initializeSheets()
+      
+      // Buscar la fila del asistente
+      const allData = await sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: 'Asistentes!A2:J',
+      })
+
+      const rows = allData.data.values || []
+      const rowIndex = rows.findIndex(row => row[0] === asistenteId)
+      
+      if (rowIndex === -1) {
+        console.log('Asistente no encontrado en Google Sheets para eliminación')
+        return true // No es error, simplemente no existe
+      }
+
+      // Eliminar la fila completa (rowIndex + 2 porque empezamos en A2)
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: this.spreadsheetId,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: 0, // Asumiendo que es la primera hoja
+                dimension: 'ROWS',
+                startIndex: rowIndex + 1, // +1 porque incluye headers
+                endIndex: rowIndex + 2
+              }
+            }
+          }]
+        }
+      })
+
+      console.log(`✅ Asistente eliminado de Google Sheets: ${asistenteId}`)
+      return true
+    } catch (error) {
+      console.error('Error eliminando asistente de Google Sheets:', error)
+      return false
+    }
+  }
+
   // Método optimizado para actualizar solo el estado de presente
   async updateAsistenciaStatus(asistenteId: string, presente: boolean, horaLlegada?: string): Promise<boolean> {
     try {
