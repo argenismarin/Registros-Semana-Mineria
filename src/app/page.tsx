@@ -29,6 +29,7 @@ export default function Home() {
   const [mostrarCamara, setMostrarCamara] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
+  const [formularioExpandido, setFormularioExpandido] = useState(false)
 
   const [estadoGoogleSheets, setEstadoGoogleSheets] = useState<'configurado' | 'no-configurado' | 'sincronizando' | 'error'>('no-configurado')
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState<string | null>(null)
@@ -385,6 +386,9 @@ export default function Home() {
       // Actualización optimista
       setAsistentes(prev => [...prev, asistenteCreado])
 
+      // Colapsar formulario automáticamente
+      setFormularioExpandido(false)
+
       toast.success(`✅ ${asistenteCreado.nombre} registrado exitosamente`)
       
       // Programar recarga
@@ -639,13 +643,31 @@ export default function Home() {
         </div>
 
         <div className="space-y-6 lg:space-y-8">
-          {/* Formulario de registro - Prioritario en móviles */}
+          {/* Formulario de registro - Colapsable */}
           <div className="bg-white shadow-sm rounded-lg">
-            <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">➕ Registrar Asistente</h2>
-            </div>
-            <div className="px-4 sm:px-6 py-4">
-              <RegistroForm onAgregarAsistente={agregarAsistente} />
+            <button
+              onClick={() => setFormularioExpandido(!formularioExpandido)}
+              className="w-full px-4 sm:px-6 py-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset rounded-t-lg"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-medium text-gray-900">➕ Registrar Asistente</h2>
+                <div className={`transform transition-transform duration-200 ${formularioExpandido ? 'rotate-180' : ''}`}>
+                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {!formularioExpandido && (
+                <p className="mt-1 text-sm text-gray-500">Haz clic aquí para registrar un nuevo asistente</p>
+              )}
+            </button>
+            
+            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+              formularioExpandido ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+            }`}>
+              <div className="px-4 sm:px-6 py-4 border-t border-gray-200">
+                <RegistroForm onAgregarAsistente={agregarAsistente} />
+              </div>
             </div>
           </div>
 
