@@ -18,10 +18,7 @@ interface Asistente {
 }
 
 interface ConfiguracionEvento {
-  // Removidas las opciones que ya no se usan
-  // nombreEvento: string
-  // mostrarCargo: boolean
-  // mostrarEmpresa: boolean
+  modoImpresion: 'normal' | 'directa'
 }
 
 export default function EscarapelasPage() {
@@ -30,12 +27,10 @@ export default function EscarapelasPage() {
   const [loading, setLoading] = useState(true)
   const [generando, setGenerando] = useState(false)
   
-  // Configuración simplificada (ya no se necesita)
-  // const [configuracion, setConfiguracion] = useState<ConfiguracionEvento>({
-  //   nombreEvento: 'EVENTO',
-  //   mostrarCargo: true,
-  //   mostrarEmpresa: true
-  // })
+  // Configuración con modo de impresión
+  const [configuracion, setConfiguracion] = useState<ConfiguracionEvento>({
+    modoImpresion: 'normal'
+  })
   
   // Filtros
   const [filtroNombre, setFiltroNombre] = useState('')
@@ -141,18 +136,21 @@ export default function EscarapelasPage() {
       seleccionada ? index : -1
     ).filter(pos => pos !== -1)
 
-    if (posicionesSeleccionadas.length === 0) {
-      toast.error('Debes seleccionar al menos una posición en la matriz')
-      return
+    // Validaciones según el modo de impresión
+    if (configuracion.modoImpresion === 'normal') {
+      if (posicionesSeleccionadas.length === 0) {
+        toast.error('Debes seleccionar al menos una posición en la matriz')
+        return
+      }
+
+      if (posicionesSeleccionadas.length < asistentesSeleccionados.length) {
+        toast.error(`Selecciona ${asistentesSeleccionados.length} posiciones o reduce la cantidad de asistentes`)
+        return
+      }
     }
 
     if (asistentesSeleccionados.length === 0) {
       toast.error('Debes seleccionar al menos un asistente')
-      return
-    }
-
-    if (posicionesSeleccionadas.length < asistentesSeleccionados.length) {
-      toast.error(`Selecciona ${asistentesSeleccionados.length} posiciones o reduce la cantidad de asistentes`)
       return
     }
 
@@ -169,8 +167,8 @@ export default function EscarapelasPage() {
         body: JSON.stringify({
           asistentes: asistentesDatos,
           opciones: {
-            posicionesSeleccionadas
-            // Removidas las opciones de configuración que ya no se usan
+            posicionesSeleccionadas: configuracion.modoImpresion === 'normal' ? posicionesSeleccionadas : [],
+            modoImpresion: configuracion.modoImpresion
           }
         })
       })
@@ -180,13 +178,19 @@ export default function EscarapelasPage() {
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `escarapelas-${new Date().toISOString().split('T')[0]}.pdf`
+        
+        const filename = configuracion.modoImpresion === 'normal' 
+          ? `escarapelas-matriz-${new Date().toISOString().split('T')[0]}.pdf`
+          : `escarapelas-directas-${new Date().toISOString().split('T')[0]}.pdf`
+        link.download = filename
+        
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
         
-        toast.success(`PDF de escarapelas generado con ${asistentesDatos.length} escarapelas`)
+        const modoTexto = configuracion.modoImpresion === 'normal' ? 'matriz A4' : 'impresión directa'
+        toast.success(`PDF de escarapelas generado (${modoTexto}) con ${asistentesDatos.length} escarapelas`)
       } else {
         throw new Error('Error generando PDF')
       }
@@ -237,54 +241,113 @@ export default function EscarapelasPage() {
           {/* Panel de Configuración */}
           <div className="lg:col-span-1 space-y-6">
             
-            {/* Configuración simplificada - ya no se necesita panel de configuración */}
-            
-            {/* Matriz de Posiciones */}
+            {/* Selector de Modo de Impresión */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">🎯 Matriz de Posiciones (11×3)</h2>
-                <div className="text-sm text-gray-600">
-                  {matrizSeleccion.filter(Boolean).length} seleccionadas
-                </div>
-              </div>
+              <h2 className="text-xl font-semibold mb-4">🖨️ Modo de Impresión</h2>
+              
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="modoImpresion"
+                    value="normal"
+                    checked={configuracion.modoImpresion === 'normal'}
+                    onChange={(e) => setConfiguracion(prev => ({ ...prev, modoImpresion: e.target.value as 'normal' | 'directa' }))}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <div>
+                    <div className="font-medium">📄 Normal (Matriz A4)</div>
+                    <div className="text-sm text-gray-600">Matriz 11×3 en papel A4 (33 escarapelas)</div>
+                  </div>
+                </label>
 
-              <div className="grid grid-cols-3 gap-1 mb-4">
-                {matrizSeleccion.map((seleccionada, index) => (
-                  <button
-                    key={index}
-                    onClick={() => togglePosicionMatriz(index)}
-                    className={`aspect-square text-xs font-medium rounded transition-colors ${
-                      seleccionada
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {index + 1}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={seleccionarPosicionesSecuenciales}
-                  className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                >
-                  Auto
-                </button>
-                <button
-                  onClick={limpiarMatriz}
-                  className="flex-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                >
-                  Limpiar
-                </button>
+                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                  <input
+                    type="radio"
+                    name="modoImpresion"
+                    value="directa"
+                    checked={configuracion.modoImpresion === 'directa'}
+                    onChange={(e) => setConfiguracion(prev => ({ ...prev, modoImpresion: e.target.value as 'normal' | 'directa' }))}
+                    className="w-4 h-4 text-blue-600"
+                  />
+                  <div>
+                    <div className="font-medium">🎯 Directa sobre Escarapela</div>
+                    <div className="text-sm text-gray-600">98mm×128mm - Una por página</div>
+                  </div>
+                </label>
               </div>
             </div>
+            
+            {/* Matriz de Posiciones - Solo en modo normal */}
+            {configuracion.modoImpresion === 'normal' && (
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold">🎯 Matriz de Posiciones (11×3)</h2>
+                  <div className="text-sm text-gray-600">
+                    {matrizSeleccion.filter(Boolean).length} seleccionadas
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1 mb-4">
+                  {matrizSeleccion.map((seleccionada, index) => (
+                    <button
+                      key={index}
+                      onClick={() => togglePosicionMatriz(index)}
+                      className={`aspect-square text-xs font-medium rounded transition-colors ${
+                        seleccionada
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {index + 1}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={seleccionarPosicionesSecuenciales}
+                    className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                  >
+                    Auto
+                  </button>
+                  <button
+                    onClick={limpiarMatriz}
+                    className="flex-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Información del modo directa */}
+            {configuracion.modoImpresion === 'directa' && (
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="text-blue-600 text-xl">ℹ️</div>
+                  <div>
+                    <h3 className="font-semibold text-blue-900 mb-2">Impresión Directa</h3>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <div>• Tamaño: 98mm × 128mm</div>
+                      <div>• Una escarapela por página</div>
+                      <div>• Texto posicionado en área específica</div>
+                      <div>• Listo para cargar escarapelas físicas</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Botón de Generación */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <button
                 onClick={generarPDFEscarapelas}
-                disabled={generando || asistentesSeleccionados.length === 0 || matrizSeleccion.filter(Boolean).length === 0}
+                disabled={
+                  generando || 
+                  asistentesSeleccionados.length === 0 || 
+                  (configuracion.modoImpresion === 'normal' && matrizSeleccion.filter(Boolean).length === 0)
+                }
                 className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 {generando ? (
@@ -293,7 +356,7 @@ export default function EscarapelasPage() {
                     Generando PDF...
                   </span>
                 ) : (
-                  `📄 Generar PDF (${asistentesSeleccionados.length} escarapelas)`
+                  `📄 Generar PDF ${configuracion.modoImpresion === 'normal' ? 'Matriz' : 'Directo'} (${asistentesSeleccionados.length} escarapelas)`
                 )}
               </button>
             </div>
