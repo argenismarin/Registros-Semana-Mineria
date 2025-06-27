@@ -50,7 +50,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
     }
 
     if (!formData.cargo.trim()) {
-      toast.error('Debe seleccionar un cargo')
+      toast.error('Debe seleccionar una modalidad')
       return
     }
 
@@ -114,7 +114,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
 
       <div>
         <label htmlFor="cargo" className="block text-sm font-medium text-gray-700 mb-1">
-          Cargo *
+          Modalidad *
         </label>
         <select
           id="cargo"
@@ -124,7 +124,7 @@ export default function RegistroForm({ onAgregarAsistente }: RegistroFormProps) 
           required
           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900"
         >
-          <option value="">Seleccione un cargo...</option>
+          <option value="">Seleccione una modalidad...</option>
           {opcionesCargo.map((cargo) => (
             <option key={cargo} value={cargo}>
               {cargo}
