@@ -16,9 +16,6 @@ interface Asistente {
 
 interface EscarapelaOptions {
   posicionesSeleccionadas: number[]
-  eventoNombre?: string
-  mostrarCargo?: boolean
-  mostrarEmpresa?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -53,65 +50,72 @@ export async function POST(request: NextRequest) {
 
     // Función para dibujar una escarapela
     const dibujarEscarapela = (asistente: Asistente, x: number, y: number) => {
-      const eventoNombre = opciones?.eventoNombre || 'EVENTO'
-      
-      // Borde de la escarapela
-      doc.setDrawColor(0, 0, 0)
-      doc.setLineWidth(0.5)
-      doc.rect(x, y, escarapelaWidth, escarapelaHeight)
-
-      // Área interna con padding
-      const padding = 2
+      // Área completa disponible con padding mínimo
+      const padding = 1
       const innerX = x + padding
       const innerY = y + padding
       const innerWidth = escarapelaWidth - (padding * 2)
       const innerHeight = escarapelaHeight - (padding * 2)
 
-      // Título del evento
-      doc.setFontSize(8)
-      doc.setFont('helvetica', 'bold')
-      const tituloAncho = doc.getTextWidth(eventoNombre)
-      doc.text(eventoNombre, innerX + (innerWidth - tituloAncho) / 2, innerY + 4)
+      // Calcular el centro vertical del área disponible
+      const centerY = y + (escarapelaHeight / 2)
 
-      // Nombre del asistente (centrado y destacado)
-      let currentY = innerY + 8
-      doc.setFontSize(10)
+      // NOMBRE DEL ASISTENTE (lo más grande posible)
       doc.setFont('helvetica', 'bold')
       
-      // Dividir nombre en líneas si es muy largo
+      // Empezar con tamaño grande y ajustar según el ancho disponible
+      let nombreFontSize = 16
       const nombreCompleto = asistente.nombre
-      const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 2)
       
-      for (let i = 0; i < nombreLineas.length && i < 2; i++) {
+      // Ajustar tamaño de fuente para que quepa en el ancho
+      doc.setFontSize(nombreFontSize)
+      while (doc.getTextWidth(nombreCompleto) > innerWidth - 2 && nombreFontSize > 8) {
+        nombreFontSize -= 1
+        doc.setFontSize(nombreFontSize)
+      }
+      
+      // Dividir nombre en líneas si es necesario
+      const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 2)
+      const numeroLineasNombre = Math.min(nombreLineas.length, 2)
+      
+      // Posición Y inicial para centrar verticalmente todo el contenido
+      let currentY
+      if (asistente.cargo && asistente.cargo.trim() !== '') {
+        // Si hay cargo, calcular posición para centrar ambos elementos
+        const alturaTotal = (numeroLineasNombre * nombreFontSize * 0.35) + 8 // 8mm para el cargo
+        currentY = centerY - (alturaTotal / 2) + (nombreFontSize * 0.35)
+      } else {
+        // Si no hay cargo, centrar solo el nombre
+        const alturaTotal = numeroLineasNombre * nombreFontSize * 0.35
+        currentY = centerY - (alturaTotal / 2) + (nombreFontSize * 0.35)
+      }
+      
+      // Dibujar líneas del nombre
+      for (let i = 0; i < numeroLineasNombre; i++) {
         const lineaAncho = doc.getTextWidth(nombreLineas[i])
         doc.text(nombreLineas[i], innerX + (innerWidth - lineaAncho) / 2, currentY)
-        currentY += 3.5
+        currentY += nombreFontSize * 0.35 // Interlineado proporcional
       }
 
-      // Cargo (si está disponible y se debe mostrar)
-      if (opciones?.mostrarCargo !== false && asistente.cargo) {
-        doc.setFontSize(7)
+      // CARGO (si existe, más grande que antes)
+      if (asistente.cargo && asistente.cargo.trim() !== '') {
+        currentY += 4 // Espacio entre nombre y cargo
+        
         doc.setFont('helvetica', 'normal')
+        
+        // Tamaño más grande para el cargo
+        let cargoFontSize = 12
+        
+        // Ajustar tamaño de fuente para que quepa en el ancho
+        doc.setFontSize(cargoFontSize)
+        while (doc.getTextWidth(asistente.cargo) > innerWidth - 2 && cargoFontSize > 6) {
+          cargoFontSize -= 1
+          doc.setFontSize(cargoFontSize)
+        }
+        
         const cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 2)
-        
-        for (let i = 0; i < cargoLineas.length && i < 1; i++) {
-          const lineaAncho = doc.getTextWidth(cargoLineas[i])
-          doc.text(cargoLineas[i], innerX + (innerWidth - lineaAncho) / 2, currentY)
-          currentY += 3
-        }
-      }
-
-      // Empresa (si está disponible y se debe mostrar)
-      if (opciones?.mostrarEmpresa !== false && asistente.empresa) {
-        doc.setFontSize(6)
-        doc.setFont('helvetica', 'italic')
-        const empresaLineas = doc.splitTextToSize(asistente.empresa, innerWidth - 2)
-        
-        for (let i = 0; i < empresaLineas.length && i < 1; i++) {
-          const lineaAncho = doc.getTextWidth(empresaLineas[i])
-          doc.text(empresaLineas[i], innerX + (innerWidth - lineaAncho) / 2, currentY)
-          currentY += 2.5
-        }
+        const lineaAncho = doc.getTextWidth(cargoLineas[0]) // Solo mostrar primera línea
+        doc.text(cargoLineas[0], innerX + (innerWidth - lineaAncho) / 2, currentY)
       }
     }
 

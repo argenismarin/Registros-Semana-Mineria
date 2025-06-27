@@ -83,6 +83,37 @@ body {
   color: #666;
 }
 
+/* NUEVOS ESTILOS SIN BORDE - TEXTO MÁS GRANDE */
+.escarapela-sin-borde {
+  width: 85mm;
+  height: 54mm;
+  padding: 2mm;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: Arial, sans-serif;
+}
+
+.escarapela-sin-borde .nombre-grande {
+  font-size: 32px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.1;
+  margin: 0;
+  color: #000;
+}
+
+.escarapela-sin-borde .cargo-grande {
+  font-size: 20px;
+  font-weight: normal;
+  text-align: center;
+  margin-top: 8px;
+  color: #333;
+  line-height: 1.2;
+}
+
 @media print {
   body {
     background: white;
@@ -92,8 +123,7 @@ body {
     display: none !important;
   }
   
-  .escarapela {
-    border: 2px solid #000;
+  .escarapela, .escarapela-sin-borde {
     page-break-inside: avoid;
   }
 } 

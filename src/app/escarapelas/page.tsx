@@ -18,9 +18,10 @@ interface Asistente {
 }
 
 interface ConfiguracionEvento {
-  nombreEvento: string
-  mostrarCargo: boolean
-  mostrarEmpresa: boolean
+  // Removidas las opciones que ya no se usan
+  // nombreEvento: string
+  // mostrarCargo: boolean
+  // mostrarEmpresa: boolean
 }
 
 export default function EscarapelasPage() {
@@ -29,12 +30,12 @@ export default function EscarapelasPage() {
   const [loading, setLoading] = useState(true)
   const [generando, setGenerando] = useState(false)
   
-  // Configuración
-  const [configuracion, setConfiguracion] = useState<ConfiguracionEvento>({
-    nombreEvento: 'EVENTO',
-    mostrarCargo: true,
-    mostrarEmpresa: true
-  })
+  // Configuración simplificada (ya no se necesita)
+  // const [configuracion, setConfiguracion] = useState<ConfiguracionEvento>({
+  //   nombreEvento: 'EVENTO',
+  //   mostrarCargo: true,
+  //   mostrarEmpresa: true
+  // })
   
   // Filtros
   const [filtroNombre, setFiltroNombre] = useState('')
@@ -168,10 +169,8 @@ export default function EscarapelasPage() {
         body: JSON.stringify({
           asistentes: asistentesDatos,
           opciones: {
-            posicionesSeleccionadas,
-            eventoNombre: configuracion.nombreEvento,
-            mostrarCargo: configuracion.mostrarCargo,
-            mostrarEmpresa: configuracion.mostrarEmpresa
+            posicionesSeleccionadas
+            // Removidas las opciones de configuración que ya no se usan
           }
         })
       })
@@ -222,7 +221,7 @@ export default function EscarapelasPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">🏷️ Generador de Escarapelas</h1>
               <p className="mt-2 text-gray-600">
-                Selecciona asistentes y posiciones en la matriz para generar escarapelas en PDF
+                Escarapelas simplificadas: Solo nombre y cargo, sin bordes
               </p>
             </div>
             <Link
@@ -234,51 +233,12 @@ export default function EscarapelasPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Panel de Configuración */}
           <div className="lg:col-span-1 space-y-6">
-            {/* Configuración del Evento */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">⚙️ Configuración</h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre del Evento
-                  </label>
-                  <input
-                    type="text"
-                    value={configuracion.nombreEvento}
-                    onChange={(e) => setConfiguracion(prev => ({ ...prev, nombreEvento: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Nombre del evento"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={configuracion.mostrarCargo}
-                      onChange={(e) => setConfiguracion(prev => ({ ...prev, mostrarCargo: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm font-medium">Mostrar cargo</span>
-                  </label>
-
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={configuracion.mostrarEmpresa}
-                      onChange={(e) => setConfiguracion(prev => ({ ...prev, mostrarEmpresa: e.target.checked }))}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm font-medium">Mostrar empresa</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
+            
+            {/* Configuración simplificada - ya no se necesita panel de configuración */}
+            
             {/* Matriz de Posiciones */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex justify-between items-center mb-4">
@@ -340,7 +300,7 @@ export default function EscarapelasPage() {
           </div>
 
           {/* Panel de Asistentes */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-md">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center mb-4">

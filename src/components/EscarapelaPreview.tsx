@@ -21,11 +21,9 @@ export default function EscarapelaPreview({
   eventoNombre = "EVENTO" 
 }: EscarapelaPreviewProps) {
   return (
-    <div className="escarapela mx-auto">
-      <h2>{eventoNombre}</h2>
-      <div className="nombre">{asistente.nombre}</div>
-      {asistente.cargo && <div className="cargo">{asistente.cargo}</div>}
-      {asistente.empresa && <div className="cargo">{asistente.empresa}</div>}
+    <div className="escarapela-sin-borde mx-auto">
+      <div className="nombre-grande">{asistente.nombre}</div>
+      {asistente.cargo && <div className="cargo-grande">{asistente.cargo}</div>}
     </div>
   )
 } 
