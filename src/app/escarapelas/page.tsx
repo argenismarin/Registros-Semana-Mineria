@@ -52,6 +52,17 @@ export default function EscarapelasPage() {
     cargarAsistentes()
   }, [])
 
+  // Debug: Mostrar información de asistentes en consola
+  useEffect(() => {
+    console.log('🔍 Estado actual:')
+    console.log('- Asistentes cargados:', asistentes.length)
+    console.log('- Asistentes filtrados:', asistentesFiltrados.length)
+    console.log('- Loading:', loading)
+    if (asistentes.length > 0) {
+      console.log('- Primer asistente:', asistentes[0])
+    }
+  }, [asistentes, asistentesFiltrados, loading])
+
   // Aplicar filtros
   useEffect(() => {
     let filtrados = [...asistentes]
@@ -76,17 +87,32 @@ export default function EscarapelasPage() {
   }, [asistentes, filtroNombre, filtroEmpresa, soloSeleccionados, asistentesSeleccionados])
 
   const cargarAsistentes = async () => {
+    console.log('🔄 Cargando asistentes...')
     try {
       const response = await fetch('/api/asistentes')
+      console.log('📡 Respuesta API:', response.status, response.statusText)
+      
       if (response.ok) {
         const data = await response.json()
-        setAsistentes(data.asistentes || [])
+        console.log('📋 Datos recibidos:', data)
+        
+        const asistentesData = data.asistentes || []
+        setAsistentes(asistentesData)
+        console.log(`✅ ${asistentesData.length} asistentes cargados`)
+        
+        if (asistentesData.length === 0) {
+          toast.info('No hay asistentes registrados. Ve a la página principal para registrar asistentes.')
+        }
+      } else {
+        console.error('❌ Error en respuesta:', response.status)
+        toast.error(`Error del servidor: ${response.status}`)
       }
     } catch (error) {
-      console.error('Error cargando asistentes:', error)
-      toast.error('Error cargando asistentes')
+      console.error('❌ Error cargando asistentes:', error)
+      toast.error('Error de conexión al cargar asistentes')
     } finally {
       setLoading(false)
+      console.log('🏁 Carga finalizada')
     }
   }
 
@@ -454,9 +480,29 @@ export default function EscarapelasPage() {
                   </div>
                 ))}
 
-                {asistentesFiltrados.length === 0 && (
+                {asistentesFiltrados.length === 0 && asistentes.length === 0 && !loading && (
                   <div className="p-8 text-center text-gray-500">
-                    No se encontraron asistentes con los filtros aplicados
+                    <div className="text-4xl mb-4">👥</div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No hay asistentes registrados</h3>
+                    <p className="text-gray-600 mb-4">
+                      Primero debes registrar asistentes desde la página principal
+                    </p>
+                    <Link
+                      href="/"
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700"
+                    >
+                      ← Ir a registrar asistentes
+                    </Link>
+                  </div>
+                )}
+
+                {asistentesFiltrados.length === 0 && asistentes.length > 0 && (
+                  <div className="p-8 text-center text-gray-500">
+                    <div className="text-4xl mb-4">🔍</div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron asistentes</h3>
+                    <p className="text-gray-600">
+                      Ajusta los filtros para mostrar más resultados
+                    </p>
                   </div>
                 )}
               </div>
