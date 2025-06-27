@@ -83,18 +83,14 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     // Centro horizontal del área de texto
     const centroHorizontal = areaTexto.x + (areaTexto.width / 2)
     
-    // NOMBRE DEL ASISTENTE
+    // NOMBRE DEL ASISTENTE - TAMAÑO FIJO
     doc.setFont('helvetica', 'bold')
     
-    // Tamaño de fuente base más grande para mayor impacto visual
-    let nombreFontSize = 40  // Tamaño base aumentado para aprovechar el área expandida
+    // Tamaño fijo para el nombre (sin ajustes dinámicos)
+    const nombreFontSize = 28  // Tamaño fijo más grande para el nombre
     const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
-    while (doc.getTextWidth(nombreCompleto) > areaTexto.width - 2 && nombreFontSize > 14) {
-      nombreFontSize -= 0.5
-      doc.setFontSize(nombreFontSize)
-    }
     
     // Dividir nombre en líneas si es necesario
     const nombreLineas = doc.splitTextToSize(nombreCompleto, areaTexto.width - 2)
@@ -103,20 +99,14 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     // Calcular altura del nombre
     const alturaNombre = numeroLineasNombre * (nombreFontSize * 0.352778)
     
-    // Preparar información del cargo
+    // Preparar información del cargo - TAMAÑO FIJO
     let alturaCargoTotal = 0
-    let cargoFontSize = 0
+    const cargoFontSize = 18  // Tamaño fijo para modalidad/cargo (menor que el nombre)
     let cargoLineas = []
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
       doc.setFont('helvetica', 'normal')
-      cargoFontSize = 28  // Tamaño base aumentado proporcional al nombre
-      
       doc.setFontSize(cargoFontSize)
-      while (doc.getTextWidth(asistente.cargo) > areaTexto.width - 2 && cargoFontSize > 10) {
-        cargoFontSize -= 0.5
-        doc.setFontSize(cargoFontSize)
-      }
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, areaTexto.width - 2)
       alturaCargoTotal = cargoFontSize * 0.352778 + 8  // Más espaciado entre nombre y cargo
@@ -209,19 +199,14 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     // Calcular el centro horizontal del área
     const centroHorizontal = x + (escarapelaWidth / 2)
 
-    // NOMBRE DEL ASISTENTE (lo más grande posible)
+    // NOMBRE DEL ASISTENTE - TAMAÑO FIJO
     doc.setFont('helvetica', 'bold')
     
-    // Empezar con tamaño muy grande y ajustar según el ancho disponible
-    let nombreFontSize = 24
+    // Tamaño fijo para nombres en modo matriz
+    const nombreFontSize = 16  // Tamaño fijo apropiado para matriz
     const nombreCompleto = asistente.nombre
     
-    // Ajustar tamaño de fuente para que quepa en el ancho
     doc.setFontSize(nombreFontSize)
-    while (doc.getTextWidth(nombreCompleto) > innerWidth - 1 && nombreFontSize > 10) {
-      nombreFontSize -= 0.5
-      doc.setFontSize(nombreFontSize)
-    }
     
     // Dividir nombre en líneas si es necesario
     const nombreLineas = doc.splitTextToSize(nombreCompleto, innerWidth - 1)
@@ -230,21 +215,14 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     // Calcular altura del nombre en mm
     const alturaNombre = numeroLineasNombre * (nombreFontSize * 0.352778)
     
-    // Preparar información del cargo
+    // Preparar información del cargo - TAMAÑO FIJO
     let alturaCargoTotal = 0
-    let cargoFontSize = 0
+    const cargoFontSize = 12  // Tamaño fijo para cargo en modo matriz
     let cargoLineas = []
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
       doc.setFont('helvetica', 'normal')
-      cargoFontSize = 18
-      
-      // Ajustar tamaño de fuente del cargo
       doc.setFontSize(cargoFontSize)
-      while (doc.getTextWidth(asistente.cargo) > innerWidth - 1 && cargoFontSize > 8) {
-        cargoFontSize -= 0.5
-        doc.setFontSize(cargoFontSize)
-      }
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
       alturaCargoTotal = cargoFontSize * 0.352778 + 3
@@ -257,7 +235,7 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     const centroVertical = y + (escarapelaHeight / 2)
     let currentY = centroVertical - (alturaContenidoTotal / 2) + (nombreFontSize * 0.352778 * 0.7)
     
-    // Volver a configurar la fuente del nombre
+    // Configurar la fuente del nombre
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(nombreFontSize)
     
