@@ -87,7 +87,7 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
     doc.setFont('helvetica', 'bold')
     
     // Tamaño fijo para el nombre (sin ajustes dinámicos)
-    const nombreFontSize = 28  // Tamaño fijo más grande para el nombre
+    const nombreFontSize = 24  // Tamaño fijo reducido para que todo quepa mejor
     const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
