@@ -18,7 +18,7 @@ interface Asistente {
 }
 
 interface ConfiguracionEvento {
-  modoImpresion: 'normal' | 'directa'
+  // Configuración simplificada - solo para 98mm x 128mm
 }
 
 export default function EscarapelasPage() {
@@ -27,24 +27,12 @@ export default function EscarapelasPage() {
   const [loading, setLoading] = useState(true)
   const [generando, setGenerando] = useState(false)
   
-  // Configuración con modo de impresión
-  const [configuracion, setConfiguracion] = useState<ConfiguracionEvento>({
-    modoImpresion: 'normal'
-  })
-  
   // Filtros
   const [filtroNombre, setFiltroNombre] = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [soloSeleccionados, setSoloSeleccionados] = useState(false)
   
-  // Matriz de selección 11x3
-  const FILAS = 11
-  const COLUMNAS = 3
-  const TOTAL_POSICIONES = FILAS * COLUMNAS
-  
-  const [matrizSeleccion, setMatrizSeleccion] = useState<boolean[]>(
-    new Array(TOTAL_POSICIONES).fill(false)
-  )
+  // Solo selección de asistentes (sin matriz de posiciones)
   const [asistentesSeleccionados, setAsistentesSeleccionados] = useState<string[]>([])
 
   // Cargar asistentes
@@ -111,14 +99,6 @@ export default function EscarapelasPage() {
     }
   }
 
-  const togglePosicionMatriz = (posicion: number) => {
-    setMatrizSeleccion(prev => {
-      const nueva = [...prev]
-      nueva[posicion] = !nueva[posicion]
-      return nueva
-    })
-  }
-
   const toggleAsistente = (asistenteId: string) => {
     setAsistentesSeleccionados(prev => {
       if (prev.includes(asistenteId)) {
@@ -137,39 +117,7 @@ export default function EscarapelasPage() {
     setAsistentesSeleccionados([])
   }
 
-  const seleccionarPosicionesSecuenciales = () => {
-    const nuevaMatriz = new Array(TOTAL_POSICIONES).fill(false)
-    const cantidadSeleccionados = asistentesSeleccionados.length
-    
-    for (let i = 0; i < Math.min(cantidadSeleccionados, TOTAL_POSICIONES); i++) {
-      nuevaMatriz[i] = true
-    }
-    
-    setMatrizSeleccion(nuevaMatriz)
-  }
-
-  const limpiarMatriz = () => {
-    setMatrizSeleccion(new Array(TOTAL_POSICIONES).fill(false))
-  }
-
   const generarPDFEscarapelas = async () => {
-    const posicionesSeleccionadas = matrizSeleccion.map((seleccionada, index) => 
-      seleccionada ? index : -1
-    ).filter(pos => pos !== -1)
-
-    // Validaciones según el modo de impresión
-    if (configuracion.modoImpresion === 'normal') {
-      if (posicionesSeleccionadas.length === 0) {
-        toast.error('Debes seleccionar al menos una posición en la matriz')
-        return
-      }
-
-      if (posicionesSeleccionadas.length < asistentesSeleccionados.length) {
-        toast.error(`Selecciona ${asistentesSeleccionados.length} posiciones o reduce la cantidad de asistentes`)
-        return
-      }
-    }
-
     if (asistentesSeleccionados.length === 0) {
       toast.error('Debes seleccionar al menos un asistente')
       return
@@ -188,8 +136,7 @@ export default function EscarapelasPage() {
         body: JSON.stringify({
           asistentes: asistentesDatos,
           opciones: {
-            posicionesSeleccionadas: configuracion.modoImpresion === 'normal' ? posicionesSeleccionadas : [],
-            modoImpresion: configuracion.modoImpresion
+            modoImpresion: 'directa'
           }
         })
       })
@@ -199,19 +146,13 @@ export default function EscarapelasPage() {
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        
-        const filename = configuracion.modoImpresion === 'normal' 
-          ? `escarapelas-matriz-${new Date().toISOString().split('T')[0]}.pdf`
-          : `escarapelas-directas-${new Date().toISOString().split('T')[0]}.pdf`
-        link.download = filename
-        
+        link.download = `escarapelas-${new Date().toISOString().split('T')[0]}.pdf`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
         
-        const modoTexto = configuracion.modoImpresion === 'normal' ? 'matriz A4' : 'impresión directa'
-        toast.success(`PDF de escarapelas generado (${modoTexto}) con ${asistentesDatos.length} escarapelas`)
+        toast.success(`PDF generado con ${asistentesDatos.length} escarapelas (98mm×128mm)`)
       } else {
         throw new Error('Error generando PDF')
       }
@@ -246,7 +187,7 @@ export default function EscarapelasPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">🏷️ Generador de Escarapelas</h1>
               <p className="mt-2 text-gray-600">
-                Escarapelas simplificadas: Solo nombre y cargo, sin bordes
+                Formato: 98mm × 128mm - Una escarapela por página
               </p>
             </div>
             <Link
@@ -259,116 +200,30 @@ export default function EscarapelasPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Panel de Configuración */}
+          {/* Panel de Control Simplificado */}
           <div className="lg:col-span-1 space-y-6">
             
-            {/* Selector de Modo de Impresión */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold mb-4">🖨️ Modo de Impresión</h2>
-              
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="modoImpresion"
-                    value="normal"
-                    checked={configuracion.modoImpresion === 'normal'}
-                    onChange={(e) => setConfiguracion(prev => ({ ...prev, modoImpresion: e.target.value as 'normal' | 'directa' }))}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium">📄 Normal (Matriz A4)</div>
-                    <div className="text-sm text-gray-600">Matriz 11×3 en papel A4 (33 escarapelas)</div>
+            {/* Información del formato */}
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-blue-600 text-xl">📏</div>
+                <div>
+                  <h3 className="font-semibold text-blue-900 mb-2">Formato de Escarapela</h3>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <div>• Tamaño: 98mm × 128mm</div>
+                    <div>• Una escarapela por página</div>
+                    <div>• Área de texto posicionada exactamente</div>
+                    <div>• Listo para impresión directa</div>
                   </div>
-                </label>
-
-                <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="modoImpresion"
-                    value="directa"
-                    checked={configuracion.modoImpresion === 'directa'}
-                    onChange={(e) => setConfiguracion(prev => ({ ...prev, modoImpresion: e.target.value as 'normal' | 'directa' }))}
-                    className="w-4 h-4 text-blue-600"
-                  />
-                  <div>
-                    <div className="font-medium">🎯 Directa sobre Escarapela</div>
-                    <div className="text-sm text-gray-600">98mm×128mm - Una por página</div>
-                  </div>
-                </label>
+                </div>
               </div>
             </div>
-            
-            {/* Matriz de Posiciones - Solo en modo normal */}
-            {configuracion.modoImpresion === 'normal' && (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold">🎯 Matriz de Posiciones (11×3)</h2>
-                  <div className="text-sm text-gray-600">
-                    {matrizSeleccion.filter(Boolean).length} seleccionadas
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1 mb-4">
-                  {matrizSeleccion.map((seleccionada, index) => (
-                    <button
-                      key={index}
-                      onClick={() => togglePosicionMatriz(index)}
-                      className={`aspect-square text-xs font-medium rounded transition-colors ${
-                        seleccionada
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {index + 1}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={seleccionarPosicionesSecuenciales}
-                    className="flex-1 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                  >
-                    Auto
-                  </button>
-                  <button
-                    onClick={limpiarMatriz}
-                    className="flex-1 px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-                  >
-                    Limpiar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Información del modo directa */}
-            {configuracion.modoImpresion === 'directa' && (
-              <div className="bg-blue-50 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <div className="text-blue-600 text-xl">ℹ️</div>
-                  <div>
-                    <h3 className="font-semibold text-blue-900 mb-2">Impresión Directa</h3>
-                    <div className="text-sm text-blue-800 space-y-1">
-                      <div>• Tamaño: 98mm × 128mm</div>
-                      <div>• Una escarapela por página</div>
-                      <div>• Texto posicionado en área específica</div>
-                      <div>• Listo para cargar escarapelas físicas</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Botón de Generación */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <button
                 onClick={generarPDFEscarapelas}
-                disabled={
-                  generando || 
-                  asistentesSeleccionados.length === 0 || 
-                  (configuracion.modoImpresion === 'normal' && matrizSeleccion.filter(Boolean).length === 0)
-                }
+                disabled={generando || asistentesSeleccionados.length === 0}
                 className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 {generando ? (
@@ -377,7 +232,7 @@ export default function EscarapelasPage() {
                     Generando PDF...
                   </span>
                 ) : (
-                  `📄 Generar PDF ${configuracion.modoImpresion === 'normal' ? 'Matriz' : 'Directo'} (${asistentesSeleccionados.length} escarapelas)`
+                  `📄 Generar PDF (${asistentesSeleccionados.length} escarapelas)`
                 )}
               </button>
             </div>
