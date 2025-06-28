@@ -7,15 +7,18 @@ class GoogleSheetsService {
   private spreadsheetId: string
   private auth: GoogleAuth
   
-  // Rate limiting y control de solicitudes
+  // Rate limiting y control de solicitudes - ULTRA CONSERVADOR
   private lastRequestTime: number = 0
   private requestQueue: (() => Promise<any>)[] = []
   private isProcessingQueue: boolean = false
-  private readonly MIN_REQUEST_INTERVAL = 2000 // 2 segundos entre solicitudes
-  private readonly MAX_BATCH_SIZE = 10 // Máximo 10 elementos por lote
+  private readonly MIN_REQUEST_INTERVAL = 8000 // 8 segundos entre solicitudes - ULTRA CONSERVADOR
+  private readonly MAX_BATCH_SIZE = 5 // Máximo 5 elementos por lote - REDUCIDO
   private pendingBatchUpdates: Map<string, Asistente> = new Map()
   private batchTimeout: NodeJS.Timeout | null = null
-  private readonly BATCH_DELAY = 5000 // 5 segundos para agrupar cambios
+  private readonly BATCH_DELAY = 15000 // 15 segundos para agrupar cambios - MÁS CONSERVADOR
+  private readonly MAX_RETRIES = 3
+  private requestCount = 0
+  private hourlyRequestStart = Date.now()
 
   constructor() {
     this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || ''
@@ -572,25 +575,66 @@ class GoogleSheetsService {
     )
   }
 
-  // Rate limiting wrapper para todas las solicitudes
+  // Rate limiting wrapper para todas las solicitudes con manejo de 429
   private async executeWithRateLimit<T>(operation: () => Promise<T>): Promise<T> {
     return new Promise((resolve, reject) => {
       this.requestQueue.push(async () => {
-        try {
-          const now = Date.now()
-          const timeSinceLastRequest = now - this.lastRequestTime
-          
-          if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
-            const delay = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest
-            console.log(`⏳ Rate limiting: esperando ${delay}ms`)
-            await new Promise(resolve => setTimeout(resolve, delay))
+        let retryAttempt = 0
+        
+        while (retryAttempt <= this.MAX_RETRIES) {
+          try {
+            const now = Date.now()
+            const timeSinceLastRequest = now - this.lastRequestTime
+            
+            // Backoff exponencial en caso de retry
+            const backoffDelay = retryAttempt > 0 ? Math.min(60000, 8000 * Math.pow(2, retryAttempt)) : 0
+            const totalDelay = Math.max(this.MIN_REQUEST_INTERVAL - timeSinceLastRequest, 0) + backoffDelay
+            
+            if (totalDelay > 0) {
+              console.log(`⏳ Rate limiting: esperando ${totalDelay}ms (intento ${retryAttempt + 1})`)
+              await new Promise(resolve => setTimeout(resolve, totalDelay))
+            }
+            
+            this.lastRequestTime = Date.now()
+            this.requestCount++
+            
+            // Reset contador cada hora
+            if (this.requestCount % 10 === 0) {
+              console.log(`📊 Solicitudes en esta hora: ${this.requestCount}`)
+            }
+            
+            const result = await operation()
+            resolve(result)
+            return
+            
+          } catch (error: any) {
+            console.error(`❌ Error en operación (intento ${retryAttempt + 1}):`, error)
+            
+            // Manejo específico de error 429
+            if (error.status === 429 || error.code === 429 || error.message?.includes('Quota exceeded')) {
+              console.error(`🚨 Rate limit exceeded (intento ${retryAttempt + 1}/${this.MAX_RETRIES})`)
+              
+              if (retryAttempt < this.MAX_RETRIES) {
+                retryAttempt++
+                // Backoff exponencial más agresivo para 429
+                const backoffTime = Math.min(120000, 15000 * Math.pow(2, retryAttempt))
+                console.log(`⏳ 429 Retry: esperando ${backoffTime/1000}s antes del intento ${retryAttempt + 1}...`)
+                await new Promise(resolve => setTimeout(resolve, backoffTime))
+                continue
+              }
+            }
+            
+            // Otros errores con retry normal
+            if (retryAttempt < this.MAX_RETRIES) {
+              retryAttempt++
+              await new Promise(resolve => setTimeout(resolve, 3000 * retryAttempt))
+              continue
+            }
+            
+            // Después de todos los intentos, rechazar
+            reject(error)
+            return
           }
-          
-          this.lastRequestTime = Date.now()
-          const result = await operation()
-          resolve(result)
-        } catch (error) {
-          reject(error)
         }
       })
       

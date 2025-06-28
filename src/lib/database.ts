@@ -26,123 +26,199 @@ interface OperacionConcurrente {
   datos?: any
 }
 
-class MemoryDatabase {
-  private asistentes: Map<string, Asistente> = new Map()
+class DatabaseMemoria {
+  private asistentes: Map<string, Asistente & { ultimaModificacion: string; sincronizado: boolean; dispositivoOrigen: string }> = new Map()
   private operacionesRecientes: OperacionConcurrente[] = []
   private maxOperacionesHistorial = 100
   private lastSyncTimestamp: string | null = null
-  private pendingSyncQueue: Set<string> = new Set() // IDs pendientes de sincronización
+  private pendingSyncQueue: Set<string> = new Set()
+  
+  // CACHE INDEFINIDO para modo offline-first
+  private cacheTimestamp: number = 0
+  private readonly CACHE_DURATION = Infinity // CACHE INDEFINIDO - solo manual sync
+  private readonly CACHE_KEY = 'asistentes_cache'
+  private isLoading = false
+  private manualSyncMode = true // Modo offline-first activado
 
-  // Obtener todos los asistentes
-  getAsistentes(): Asistente[] {
-    return Array.from(this.asistentes.values()).sort((a, b) => 
-      a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase())
-    )
+  constructor() {
+    this.loadFromLocalStorage()
   }
 
-  // Buscar asistente por ID
-  findAsistenteById(id: string): Asistente | null {
-    return this.asistentes.get(id) || null
+  // Cargar cache desde localStorage si existe
+  private loadFromLocalStorage(): void {
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(this.CACHE_KEY)
+        if (cached) {
+          const data = JSON.parse(cached)
+          if (data.timestamp && (Date.now() - data.timestamp) < this.CACHE_DURATION) {
+            console.log('📦 Cargando desde cache local:', data.asistentes.length, 'asistentes')
+            data.asistentes.forEach((asistente: any) => {
+              this.asistentes.set(asistente.id, asistente)
+            })
+            this.cacheTimestamp = data.timestamp
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando cache local:', error)
+    }
+  }
+
+  // Guardar cache en localStorage
+  private saveToLocalStorage(): void {
+    try {
+      if (typeof window !== 'undefined') {
+        const data = {
+          timestamp: this.cacheTimestamp,
+          asistentes: Array.from(this.asistentes.values())
+        }
+        localStorage.setItem(this.CACHE_KEY, JSON.stringify(data))
+        console.log('💾 Cache guardado localmente:', data.asistentes.length, 'asistentes')
+      }
+    } catch (error) {
+      console.error('Error guardando cache local:', error)
+    }
+  }
+
+  // Verificar si el cache es válido (SIEMPRE válido en modo offline-first)
+  isCacheValid(): boolean {
+    if (this.manualSyncMode) {
+      console.log(`🔒 MODO OFFLINE-FIRST: Cache siempre válido hasta sincronización manual`)
+      return true
+    }
+    
+    const cacheAge = Date.now() - this.cacheTimestamp
+    const isValid = cacheAge < this.CACHE_DURATION
+    console.log(`🕐 Cache ${isValid ? 'VÁLIDO' : 'EXPIRADO'} (${Math.round(cacheAge/1000)}s)`)
+    return isValid
+  }
+
+  // Invalidar cache manualmente (para forzar sincronización)
+  invalidateCache(): void {
+    console.log('💥 Cache invalidado manualmente')
+    this.cacheTimestamp = 0
+  }
+
+  // Activar/desactivar modo offline-first
+  setOfflineMode(offline: boolean): void {
+    this.manualSyncMode = offline
+    console.log(`🔄 Modo offline-first: ${offline ? 'ACTIVADO' : 'DESACTIVADO'}`)
+  }
+
+  // Marcar cache como actualizado
+  refreshCache(): void {
+    this.cacheTimestamp = Date.now()
+    this.saveToLocalStorage()
+    console.log('🔄 Cache refrescado:', new Date(this.cacheTimestamp).toLocaleTimeString())
+  }
+
+  // Obtener todos los asistentes (con cache)
+  getAllAsistentes(): Asistente[] {
+    const asistentes = Array.from(this.asistentes.values()).map(a => ({
+      id: a.id,
+      nombre: a.nombre,
+      email: a.email,
+      cargo: a.cargo,
+      empresa: a.empresa,
+      presente: a.presente,
+      escarapelaImpresa: a.escarapelaImpresa,
+      fechaRegistro: a.fechaRegistro,
+      horaLlegada: a.horaLlegada,
+      fechaImpresion: a.fechaImpresion,
+      qrGenerado: a.qrGenerado,
+      fechaGeneracionQR: a.fechaGeneracionQR
+    }))
+    
+    return asistentes.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
+  }
+
+  // Reemplazar todos los asistentes (preservando cambios locales)
+  replaceAllAsistentes(nuevosAsistentes: Asistente[]): void {
+    console.log(`📊 Reemplazando ${nuevosAsistentes.length} asistentes (preservando ${this.pendingSyncQueue.size} pendientes)`)
+    
+    // Guardar cambios pendientes
+    const pendientesData = new Map()
+    this.pendingSyncQueue.forEach(id => {
+      if (this.asistentes.has(id)) {
+        pendientesData.set(id, this.asistentes.get(id))
+      }
+    })
+    
+    // Limpiar y repoblar
+    this.asistentes.clear()
+    
+    const timestamp = new Date().toISOString()
+    nuevosAsistentes.forEach(asistente => {
+      this.asistentes.set(asistente.id, {
+        ...asistente,
+        ultimaModificacion: timestamp,
+        sincronizado: true,
+        dispositivoOrigen: 'sheets'
+      })
+    })
+    
+    // Restaurar cambios pendientes
+    pendientesData.forEach((data, id) => {
+      this.asistentes.set(id, data)
+      console.log(`🔄 Restaurado cambio pendiente: ${data.nombre}`)
+    })
+    
+    // Actualizar cache
+    this.refreshCache()
+    
+    console.log(`✅ Base reemplazada: ${this.asistentes.size} total (${this.pendingSyncQueue.size} pendientes)`)
   }
 
   // Agregar asistente
-  addAsistente(asistente: Asistente): Asistente {
-    const asistenteConMetadata: Asistente = {
+  addAsistente(asistente: Asistente): void {
+    const timestamp = new Date().toISOString()
+    this.asistentes.set(asistente.id, {
       ...asistente,
-      ultimaModificacion: new Date().toISOString(),
+      ultimaModificacion: timestamp,
       sincronizado: false,
       dispositivoOrigen: 'local'
-    }
-    
-    this.asistentes.set(asistente.id, asistenteConMetadata)
+    })
     this.pendingSyncQueue.add(asistente.id)
-    
-    console.log(`➕ Asistente agregado a memoria: ${asistente.nombre}`)
-    return asistenteConMetadata
+    this.saveToLocalStorage()
+    console.log(`➕ Asistente agregado: ${asistente.nombre} (pendiente sincronización)`)
   }
 
-  // Actualizar asistente con manejo de conflictos
-  updateAsistente(id: string, datosActualizacion: Partial<Asistente>): Asistente | null {
-    const asistenteExistente = this.asistentes.get(id)
-    if (!asistenteExistente) {
-      console.error(`❌ Asistente ${id} no encontrado para actualizar`)
-      return null
-    }
-
-    const asistenteActualizado: Asistente = {
-      ...asistenteExistente,
-      ...datosActualizacion,
-      ultimaModificacion: new Date().toISOString(),
+  // Actualizar asistente
+  updateAsistente(asistente: Asistente): void {
+    const timestamp = new Date().toISOString()
+    this.asistentes.set(asistente.id, {
+      ...asistente,
+      ultimaModificacion: timestamp,
       sincronizado: false,
       dispositivoOrigen: 'local'
-    }
-
-    this.asistentes.set(id, asistenteActualizado)
-    this.pendingSyncQueue.add(id)
-    
-    console.log(`✏️ Asistente actualizado en memoria: ${asistenteActualizado.nombre}`)
-    return asistenteActualizado
+    })
+    this.pendingSyncQueue.add(asistente.id)
+    this.saveToLocalStorage()
+    console.log(`✏️ Asistente actualizado: ${asistente.nombre} (pendiente sincronización)`)
   }
 
   // Eliminar asistente
   deleteAsistente(id: string): boolean {
-    const eliminado = this.asistentes.delete(id)
-    if (eliminado) {
+    const asistente = this.asistentes.get(id)
+    if (asistente) {
+      this.asistentes.delete(id)
       this.pendingSyncQueue.delete(id)
-      console.log(`🗑️ Asistente eliminado de memoria: ${id}`)
+      this.saveToLocalStorage()
+      console.log(`🗑️ Asistente eliminado: ${asistente.nombre}`)
+      return true
     }
-    return eliminado
+    return false
   }
 
-  // Reemplazar todos los asistentes (para sincronización desde Google Sheets)
-  replaceAllAsistentes(asistentes: Asistente[], preservarCambiosLocales = true): void {
-    console.log(`🔄 Reemplazando ${this.asistentes.size} asistentes con ${asistentes.length} de Google Sheets`)
-    
-    // Si hay cambios locales pendientes, preservarlos
-    const cambiosLocalesPendientes = new Map<string, Asistente>()
-    
-    if (preservarCambiosLocales) {
-      this.pendingSyncQueue.forEach(id => {
-        const asistenteLocal = this.asistentes.get(id)
-        if (asistenteLocal && !asistenteLocal.sincronizado) {
-          cambiosLocalesPendientes.set(id, asistenteLocal)
-          console.log(`💾 Preservando cambio local pendiente: ${asistenteLocal.nombre}`)
-        }
-      })
-    }
-
-    // Limpiar y recargar
-    this.asistentes.clear()
-    
-    // Agregar asistentes de Google Sheets
-    asistentes.forEach(asistente => {
-      const asistenteConMetadata: Asistente = {
-        ...asistente,
-        ultimaModificacion: asistente.ultimaModificacion || asistente.fechaRegistro,
-        sincronizado: true,
-        dispositivoOrigen: 'sheets'
-      }
-      this.asistentes.set(asistente.id, asistenteConMetadata)
-    })
-
-    // Restaurar cambios locales pendientes (tienen prioridad)
-    cambiosLocalesPendientes.forEach((asistenteLocal, id) => {
-      this.asistentes.set(id, asistenteLocal)
-      console.log(`🔄 Restaurado cambio local: ${asistenteLocal.nombre}`)
-    })
-
-    this.lastSyncTimestamp = new Date().toISOString()
-    console.log(`✅ Base de datos actualizada con ${this.asistentes.size} asistentes`)
-  }
-
-  // Marcar asistente como sincronizado
+  // Marcar como sincronizado
   markAsSynced(id: string): void {
     const asistente = this.asistentes.get(id)
     if (asistente) {
       asistente.sincronizado = true
-      this.asistentes.set(id, asistente)
       this.pendingSyncQueue.delete(id)
-      console.log(`✅ Asistente marcado como sincronizado: ${asistente.nombre}`)
+      this.saveToLocalStorage()
+      console.log(`✅ Marcado como sincronizado: ${asistente.nombre}`)
     }
   }
 
@@ -150,66 +226,61 @@ class MemoryDatabase {
   getPendingSyncAsistentes(): Asistente[] {
     return Array.from(this.pendingSyncQueue)
       .map(id => this.asistentes.get(id))
-      .filter((asistente): asistente is Asistente => asistente !== undefined)
+      .filter(Boolean)
+      .map(a => ({
+        id: a!.id,
+        nombre: a!.nombre,
+        email: a!.email,
+        cargo: a!.cargo,
+        empresa: a!.empresa,
+        presente: a!.presente,
+        escarapelaImpresa: a!.escarapelaImpresa,
+        fechaRegistro: a!.fechaRegistro,
+        horaLlegada: a!.horaLlegada,
+        fechaImpresion: a!.fechaImpresion,
+        qrGenerado: a!.qrGenerado,
+        fechaGeneracionQR: a!.fechaGeneracionQR
+      }))
   }
 
-  // Obtener estadísticas de sincronización
-  getSyncStats(): {
-    total: number
-    sincronizados: number
-    pendientes: number
-    lastSync: string | null
-  } {
+  // Estadísticas de sincronización
+  getSyncStats(): { total: number; sincronizados: number; pendientes: number; cacheAge: number; cacheValid: boolean } {
     const total = this.asistentes.size
-    const sincronizados = Array.from(this.asistentes.values())
-      .filter(a => a.sincronizado).length
+    const pendientes = this.pendingSyncQueue.size
+    const sincronizados = total - pendientes
+    const cacheAge = Date.now() - this.cacheTimestamp
+    const cacheValid = this.isCacheValid()
     
     return {
       total,
       sincronizados,
-      pendientes: this.pendingSyncQueue.size,
-      lastSync: this.lastSyncTimestamp
+      pendientes,
+      cacheAge: Math.round(cacheAge / 1000),
+      cacheValid
     }
   }
 
-  // Limpiar cola de sincronización
-  clearSyncQueue(): void {
-    this.pendingSyncQueue.clear()
-    console.log('🧹 Cola de sincronización limpiada')
-  }
-
-  // Verificar si hay cambios locales pendientes
-  hasPendingChanges(): boolean {
-    return this.pendingSyncQueue.size > 0
-  }
-
-  // Método para debugging
-  debugInfo(): any {
-    return {
-      totalAsistentes: this.asistentes.size,
-      pendientesSync: this.pendingSyncQueue.size,
-      lastSync: this.lastSyncTimestamp,
-      asistentesIds: Array.from(this.asistentes.keys()),
-      pendientesIds: Array.from(this.pendingSyncQueue)
+  // Limpiar cache (uso administrativo)
+  clearCache(): void {
+    this.cacheTimestamp = 0
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.CACHE_KEY)
     }
+    console.log('🗑️ Cache limpiado')
   }
 
-  // Buscar asistentes
-  searchAsistentes(query: string): Asistente[] {
-    if (!query || query.trim() === '') {
-      return this.getAsistentes()
-    }
+  // Estado de carga
+  setLoading(loading: boolean): void {
+    this.isLoading = loading
+  }
 
-    const lowerQuery = query.toLowerCase().trim()
-    const resultados = this.getAsistentes().filter(a => 
-      a.nombre.toLowerCase().includes(lowerQuery) ||
-      (a.email && a.email.toLowerCase().includes(lowerQuery)) ||
-      (a.cargo && a.cargo.toLowerCase().includes(lowerQuery)) ||
-      (a.empresa && a.empresa.toLowerCase().includes(lowerQuery))
-    )
+  getLoadingState(): boolean {
+    return this.isLoading
+  }
 
-    console.log(`🔍 Búsqueda "${query}": ${resultados.length} resultados`)
-    return resultados
+  // Buscar asistente por ID
+  findAsistenteById(id: string): Asistente | null {
+    return this.asistentes.get(id) || null
   }
 
   // Marcar asistencia
@@ -327,7 +398,7 @@ class MemoryDatabase {
 }
 
 // Instancia singleton
-const db = new MemoryDatabase()
+const db = new DatabaseMemoria()
 
 // Función para inicializar con datos de prueba (opcional)
 export function inicializarDatosPrueba() {

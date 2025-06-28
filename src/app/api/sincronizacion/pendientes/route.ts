@@ -2,185 +2,150 @@ import { NextRequest, NextResponse } from 'next/server'
 import db from '@/lib/database'
 import googleSheetsService from '@/lib/googleSheets'
 
-// GET /api/sincronizacion/pendientes - Obtener información de cambios pendientes
-export async function GET(request: NextRequest) {
+// GET - Obtener información de sincronización pendiente
+export async function GET() {
   try {
     const stats = db.getSyncStats()
     const pendientes = db.getPendingSyncAsistentes()
-
+    
     return NextResponse.json({
-      stats,
-      pendientes: pendientes.map(a => ({
-        id: a.id,
-        nombre: a.nombre,
-        ultimaModificacion: a.ultimaModificacion,
-        presente: a.presente,
-        escarapelaImpresa: a.escarapelaImpresa
+      success: true,
+      stats: {
+        ...stats,
+        modoOffline: true,
+        mensaje: 'Modo OFFLINE-FIRST: Sincronización solo manual'
+      },
+      pendientes: pendientes.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        presente: p.presente,
+        escarapelaImpresa: p.escarapelaImpresa
       }))
     })
-  } catch (error) {
-    console.error('Error obteniendo pendientes:', error)
-    return NextResponse.json(
-      { error: 'Error obteniendo información de sincronización' },
-      { status: 500 }
-    )
+  } catch (error: any) {
+    console.error('❌ Error obteniendo pendientes:', error)
+    return NextResponse.json({
+      success: false,
+      error: error.message
+    }, { status: 500 })
   }
 }
 
-// POST /api/sincronizacion/pendientes - Sincronizar todos los cambios pendientes DE FORMA OPTIMIZADA
-export async function POST(request: NextRequest) {
+// POST - Sincronizar cambios pendientes MANUALMENTE
+export async function POST(req: NextRequest) {
   try {
-    console.log('🔄 Iniciando sincronización OPTIMIZADA de cambios pendientes...')
-    
-    if (!googleSheetsService.isConfigured()) {
-      return NextResponse.json(
-        { error: 'Google Sheets no está configurado' },
-        { status: 400 }
-      )
-    }
-
     const pendientes = db.getPendingSyncAsistentes()
     
     if (pendientes.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No hay cambios pendientes para sincronizar',
-        resultados: {
-          total: 0,
-          exitosos: 0,
-          fallidos: 0,
-          errores: []
-        }
+        sincronizados: 0,
+        fallidos: []
       })
     }
 
-    console.log(`📦 Sincronizando ${pendientes.length} cambios pendientes usando BATCH OPTIMIZADO...`)
+    console.log(`🔄 SINCRONIZACIÓN MANUAL: ${pendientes.length} cambios pendientes`)
     
     const resultados = {
-      total: pendientes.length,
-      exitosos: 0,
-      fallidos: 0,
-      errores: [] as string[],
-      metodo: 'optimized-batch'
+      sincronizados: 0,
+      fallidos: [] as string[]
     }
 
-    try {
-      // USAR MÉTODO OPTIMIZADO CON BATCHING AUTÁTICO
-      for (const asistente of pendientes) {
-        try {
-          // Agregar al batch - se procesará automáticamente
-          const success = await googleSheetsService.updateAsistenteOptimized(asistente, true)
-          
-          if (success) {
-            // Marcar como sincronizado inmediatamente en memoria local
-            // (el batch real se procesará en background)
-            db.markAsSynced(asistente.id)
-            resultados.exitosos++
-            console.log(`📦 ✅ Agregado al batch: ${asistente.nombre}`)
-          } else {
-            resultados.fallidos++
-            resultados.errores.push(`Error agregando ${asistente.nombre} al batch`)
-          }
-        } catch (error) {
-          resultados.fallidos++
-          const errorMsg = `Error procesando ${asistente.nombre}: ${error instanceof Error ? error.message : 'Error desconocido'}`
-          resultados.errores.push(errorMsg)
-          console.error('❌', errorMsg)
-        }
-      }
-
-      // FORZAR PROCESAMIENTO INMEDIATO DEL BATCH PARA RESPUESTA RÁPIDA
-      console.log('🚀 Forzando procesamiento inmediato del batch...')
-      await googleSheetsService.flushBatch()
+    // Procesar LENTAMENTE para evitar rate limiting
+    // Procesar UNO POR UNO con delays de 10 segundos entre cada uno
+    for (let i = 0; i < pendientes.length; i++) {
+      const asistente = pendientes[i]
       
-      console.log(`✅ Sincronización optimizada completada: ${resultados.exitosos}/${resultados.total} exitosos`)
-
-    } catch (batchError) {
-      console.error('❌ Error en sincronización batch:', batchError)
-      
-      // FALLBACK: Procesar uno por uno si el batch falla completamente
-      console.log('🔄 Fallback: procesando uno por uno...')
-      resultados.metodo = 'fallback-individual'
-      
-      for (const asistente of pendientes) {
-        try {
-          const success = await googleSheetsService.updateAsistenteOptimized(asistente, false)
-          if (success) {
-            db.markAsSynced(asistente.id)
-            resultados.exitosos++
-          } else {
-            resultados.fallidos++
-            resultados.errores.push(`Fallback: Error sincronizando ${asistente.nombre}`)
-          }
-        } catch (error) {
-          resultados.fallidos++
-          resultados.errores.push(`Fallback: Error ${asistente.nombre}: ${error instanceof Error ? error.message : 'Desconocido'}`)
-        }
-      }
-    }
-
-    // Notificar a otros clientes si hubo cambios exitosos
-    if (resultados.exitosos > 0) {
       try {
-        await fetch(`${request.nextUrl.origin}/api/socket.io`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            event: 'sincronizacion-optimizada-completada',
-            data: {
-              exitosos: resultados.exitosos,
-              fallidos: resultados.fallidos,
-              metodo: resultados.metodo,
-              timestamp: new Date().toISOString()
-            }
-          })
-        })
-      } catch (socketError) {
-        console.error('Error notificando sincronización:', socketError)
+        console.log(`📤 Sincronizando ${i + 1}/${pendientes.length}: ${asistente.nombre}`)
+        
+        // Intentar sincronizar (usa el sistema de batching interno)
+        const success = await googleSheetsService.updateAsistenteOptimized(asistente, false) // Sin batch, individual
+        
+        if (success) {
+          db.markAsSynced(asistente.id)
+          resultados.sincronizados++
+          console.log(`✅ Sincronizado: ${asistente.nombre}`)
+        } else {
+          resultados.fallidos.push(asistente.nombre)
+          console.log(`❌ Falló sincronización: ${asistente.nombre}`)
+        }
+        
+        // DELAY ULTRA CONSERVADOR entre cada sincronización
+        if (i < pendientes.length - 1) { // No delay después del último
+          console.log(`⏳ Esperando 12 segundos antes del siguiente...`)
+          await new Promise(resolve => setTimeout(resolve, 12000)) // 12 segundos
+        }
+        
+      } catch (error: any) {
+        console.error(`❌ Error sincronizando ${asistente.nombre}:`, error)
+        resultados.fallidos.push(asistente.nombre)
+        
+        // En caso de error 429, esperar aún más
+        if (error.status === 429 || error.code === 429) {
+          console.log(`🚨 Rate limit detectado, esperando 30 segundos...`)
+          await new Promise(resolve => setTimeout(resolve, 30000)) // 30 segundos
+        }
       }
     }
 
-    const response = {
-      success: true,
-      message: `Sincronización optimizada completada: ${resultados.exitosos} exitosos, ${resultados.fallidos} fallidos (${resultados.metodo})`,
-      resultados,
-      pendientesRestantes: db.getPendingSyncAsistentes().length,
-      batchStats: googleSheetsService.getBatchStats()
+    // Forzar flush de cualquier batch pendiente
+    try {
+      await googleSheetsService.flushBatch()
+    } catch (error) {
+      console.error('Error en flush batch:', error)
     }
 
-    return NextResponse.json(response)
+    const mensaje = `Sincronización completada: ${resultados.sincronizados} exitosos, ${resultados.fallidos.length} fallidos`
+    console.log(`📊 ${mensaje}`)
 
-  } catch (error) {
-    console.error('❌ Error en sincronización optimizada de pendientes:', error)
-    return NextResponse.json(
-      { 
-        error: 'Error en sincronización optimizada de cambios pendientes',
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({
+      success: true,
+      message: mensaje,
+      sincronizados: resultados.sincronizados,
+      fallidos: resultados.fallidos,
+      detalles: {
+        totalProcesados: pendientes.length,
+        tiempoEstimado: `${Math.round(pendientes.length * 12)}s`
+      }
+    })
+
+  } catch (error: any) {
+    console.error('❌ Error en sincronización manual:', error)
+    return NextResponse.json({
+      success: false,
+      error: `Error sincronizando: ${error.message}`,
+      sincronizados: 0,
+      fallidos: []
+    }, { status: 500 })
   }
 }
 
-// DELETE /api/sincronizacion/pendientes - Limpiar cola de sincronización (usar con cuidado)
-export async function DELETE(request: NextRequest) {
+// DELETE - Limpiar cola de pendientes (uso administrativo)
+export async function DELETE() {
   try {
-    const pendientesAntes = db.getPendingSyncAsistentes().length
-    db.clearSyncQueue()
+    const stats = db.getSyncStats()
+    const pendientesBorrados = stats.pendientes
     
-    console.log(`🧹 Cola de sincronización limpiada: ${pendientesAntes} elementos eliminados`)
+    // Marcar todos como sincronizados (limpieza administrativa)
+    const pendientes = db.getPendingSyncAsistentes()
+    pendientes.forEach(asistente => {
+      db.markAsSynced(asistente.id)
+    })
+    
+    console.log(`🧹 Cola de pendientes limpiada: ${pendientesBorrados} elementos`)
     
     return NextResponse.json({
       success: true,
-      message: `Cola de sincronización limpiada: ${pendientesAntes} elementos eliminados`,
-      pendientesEliminados: pendientesAntes
+      message: `Cola limpiada: ${pendientesBorrados} pendientes marcados como sincronizados`,
+      pendientesBorrados
     })
-    
-  } catch (error) {
-    console.error('Error limpiando cola de sincronización:', error)
-    return NextResponse.json(
-      { error: 'Error limpiando cola de sincronización' },
-      { status: 500 }
-    )
+  } catch (error: any) {
+    console.error('❌ Error limpiando cola:', error)
+    return NextResponse.json({
+      success: false,
+      error: error.message
+    }, { status: 500 })
   }
 } 

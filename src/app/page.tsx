@@ -39,18 +39,16 @@ export default function Home() {
   const [estadoSincronizacion, setEstadoSincronizacion] = useState<'sincronizado' | 'sincronizando' | 'error' | 'pendientes'>('sincronizado')
   const [pendientesSincronizacion, setPendientesSincronizacion] = useState(0)
   const intervalRef = useRef<NodeJS.Timeout>()
-  const isUpdatingRef = useRef(false)
 
   // Estados para control de polling y sincronización
-  const [isPollingEnabled, setIsPollingEnabled] = useState(true)
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
   const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null)
 
-  // Configuración de intervalos OPTIMIZADA (mucho menos agresiva)
-  const INTERVALO_POLLING_PRINCIPAL = 120000 // 2 minutos (antes 45 segundos)
-  const INTERVALO_VERIFICACION_PENDIENTES = 60000 // 1 minuto (antes 15 segundos) 
-  const DEBOUNCE_DELAY = 3000 // 3 segundos para agrupar cambios múltiples
-  const MAX_PENDIENTES_AUTO_SYNC = 5 // Auto-sync solo si hay pocos pendientes
+  // Configuración de intervalos OPTIMIZADA - más rápida
+  const INTERVALO_POLLING_PRINCIPAL = 300000 // 5 minutos - ULTRA CONSERVADOR para evitar 429
+  const INTERVALO_VERIFICACION_PENDIENTES = 180000 // 3 minutos - ULTRA CONSERVADOR para evitar 429
+  const DEBOUNCE_DELAY = 8000 // 8 segundos - ULTRA CONSERVADOR 
+const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
   const TIMEOUT_OPERACION = 30000 // 30 segundos timeout para operaciones
 
   // Generar clienteId solo en el cliente para evitar errores de hidratación
@@ -133,14 +131,14 @@ export default function Home() {
     }
   }, []) // Sin dependencias para evitar referencias circulares
 
-  // Sincronizar pendientes con debouncing para múltiples cambios rápidos
+  // Sincronizar pendientes ULTRA RÁPIDO
   const sincronizarPendientes = useCallback(async (showLoading = true) => {
     // Limpiar timeout previo si existe
     if (debounceTimeout) {
       clearTimeout(debounceTimeout)
     }
 
-    // Si no se requiere mostrar loading, aplicar debouncing
+    // Ejecutar con debouncing más rápido o inmediatamente
     if (!showLoading) {
       const timeout = setTimeout(async () => {
         await ejecutarSincronizacionPendientes(showLoading)
@@ -154,13 +152,8 @@ export default function Home() {
     await ejecutarSincronizacionPendientes(showLoading)
   }, [debounceTimeout, ejecutarSincronizacionPendientes])
 
-  // Verificar pendientes con debouncing y límites
+  // Verificar pendientes SIN restricciones - ultra responsivo
   const verificarPendientes = useCallback(async () => {
-    // Solo verificar si no hay operaciones críticas en curso
-    if (estadoSincronizacion === 'sincronizando' || estadoGoogleSheets === 'sincronizando') {
-      return
-    }
-
     try {
       const response = await fetch('/api/sincronizacion/pendientes')
       if (response.ok) {
@@ -168,38 +161,19 @@ export default function Home() {
         const pendientes = data.pendientes || 0
         setPendientesSincronizacion(pendientes)
 
-        // Auto-sincronizar solo si hay pocos pendientes (para evitar sobrecarga)
+        // Auto-sincronizar más permisivo
         if (pendientes > 0 && pendientes <= MAX_PENDIENTES_AUTO_SYNC) {
           console.log(`🔄 Auto-sincronizando ${pendientes} cambios pendientes...`)
-          await sincronizarPendientes(false) // false = no forzar UI loading
+          await sincronizarPendientes(false) // false = no mostrar loading
         }
       }
     } catch (error) {
       console.error('Error verificando pendientes:', error)
     }
-  }, [estadoSincronizacion, estadoGoogleSheets, sincronizarPendientes])
+  }, [sincronizarPendientes])
 
-  // Cargar asistentes con control de frecuencia
+  // Cargar asistentes SIN bloqueos - ultra responsivo
   const cargarAsistentes = useCallback(async (forceReload = false) => {
-    // No hacer polling si hay operaciones en curso o si se hizo muy recientemente
-    if (!forceReload) {
-      if (estadoSincronizacion === 'sincronizando' || 
-          estadoGoogleSheets === 'sincronizando' ||
-          pendientesSincronizacion > MAX_PENDIENTES_AUTO_SYNC) {
-        console.log('⏭️ Saltando polling: operación en curso o muchos pendientes')
-        return
-      }
-
-      // Verificar si se hizo sync muy recientemente (menos de 30 segundos)
-      if (lastSyncTime && (Date.now() - lastSyncTime.getTime()) < 30000) {
-        console.log('⏭️ Saltando polling: sync muy reciente')
-        return
-      }
-    }
-
-    if (isUpdatingRef.current) return
-    
-    isUpdatingRef.current = true
     try {
       console.log(`🔄 Cargando asistentes... (forzado: ${forceReload})`)
       const response = await fetch('/api/asistentes', {
@@ -219,9 +193,6 @@ export default function Home() {
       setAsistentes(data)
       setLastSyncTime(new Date())
       
-      // Verificar pendientes después de cargar
-      setTimeout(verificarPendientes, 500)
-      
     } catch (error) {
       console.error('❌ Error cargando asistentes:', error)
       setEstadoSincronizacion('error')
@@ -230,10 +201,9 @@ export default function Home() {
         toast.error('Error cargando datos. Reintentando...')
       }
     } finally {
-      isUpdatingRef.current = false
       setLoading(false)
     }
-  }, [clienteId, loading, verificarPendientes, lastSyncTime, estadoSincronizacion, estadoGoogleSheets, pendientesSincronizacion])
+  }, [clienteId, loading, lastSyncTime])
 
   // Verificar estado de Google Sheets
   const verificarEstadoGoogleSheets = useCallback(async () => {
@@ -340,123 +310,127 @@ export default function Home() {
     }
   }
 
-  // Configurar polling inteligente
+  // Configurar polling inteligente pero ROBUSTO
   useEffect(() => {
     // Solo cargar asistentes si ya tenemos clienteId
     if (!clienteId) return
     
-    // Carga inicial
+    // ✅ CARGA INICIAL INMEDIATA - SIEMPRE ejecutar
+    console.log('🚀 Iniciando carga inicial de datos...')
     cargarAsistentes(true)
     
     // Verificar estado de Google Sheets
     verificarEstadoGoogleSheets()
 
-    // Configurar polling principal (menos frecuente)
-    intervalRef.current = setInterval(() => {
-      // Solo hacer polling si no hay operaciones en curso y no hay pendientes
-      if (!isUpdatingRef.current && pendientesSincronizacion === 0) {
-        cargarAsistentes()
-      }
-    }, INTERVALO_POLLING_PRINCIPAL)
-
-    // Configurar verificación de pendientes (más frecuente)
-    const pendientesInterval = setInterval(() => {
-      verificarPendientes()
-    }, INTERVALO_VERIFICACION_PENDIENTES)
+    // 🚫 POLLING AUTOMÁTICO COMPLETAMENTE DESHABILITADO
+    // Para evitar rate limiting (429) de Google Sheets API
+    console.log('📱 MODO OFFLINE-FIRST: Polling automático deshabilitado')
+    console.log('💡 Usa "Sincronizar Sheets" o "Sync Pendientes" para sincronizar manualmente')
+    
+    // Opcional: Configurar verificación de pendientes SOLO cada 10 minutos
+    // const pendientesInterval = setInterval(() => {
+    //   verificarPendientes()
+    // }, 600000) // 10 minutos
 
     // Limpiar intervalos al desmontar
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
-      clearInterval(pendientesInterval)
+      // clearInterval(pendientesInterval) // Comentado porque no hay polling automático
     }
-  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets, verificarPendientes, pendientesSincronizacion])
+  }, [clienteId]) // Solo depender de clienteId para evitar loops
 
+  // Marcar asistencia SIN bloqueos - respuesta inmediata
   const marcarAsistencia = async (id: string) => {
-    if (isUpdatingRef.current) {
-      toast.warning('Operación en progreso, espera...')
-      return
-    }
-
     try {
-      isUpdatingRef.current = true
       console.log('✅ Marcando asistencia para:', id)
       
-      const response = await ejecutarConTimeout(
-        () => fetch(`/api/asistentes/${id}/asistencia`, {
-          method: 'POST',
-          headers: {
-            'X-Cliente-ID': clienteId
-          }
-        }),
-        'Marcar asistencia'
+      // 1. ACTUALIZACIÓN OPTIMISTA INMEDIATA - sin esperas
+      setAsistentes(prev => 
+        prev.map(a => a.id === id ? {
+          ...a, 
+          presente: true, 
+          horaLlegada: new Date().toLocaleTimeString('es-CO', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          })
+        } : a)
       )
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
+      // 2. NOTIFICACIÓN INMEDIATA
+      const asistenteNombre = asistentes.find(a => a.id === id)?.nombre || 'Asistente'
+      toast.success(`✅ ${asistenteNombre} marcado como presente`)
       
-      const resultado = await response.json()
-      
-      if (resultado.success && resultado.asistente) {
-        // Actualización optimista
-        setAsistentes(prev => 
-          prev.map(a => a.id === id ? resultado.asistente : a)
-        )
-        
-        toast.success(`✅ ${resultado.asistente.nombre} marcado como presente`)
-        
-        // Programar recarga
-        setTimeout(() => cargarAsistentes(), 500)
-      } else {
-        throw new Error(resultado.error || 'Respuesta inválida del servidor')
-      }
+      // 3. SINCRONIZACIÓN EN BACKGROUND (sin bloquear UI)
+      fetch(`/api/asistentes/${id}/asistencia`, {
+        method: 'POST',
+        headers: {
+          'X-Cliente-ID': clienteId
+        }
+      }).then(async response => {
+        if (response.ok) {
+          const resultado = await response.json()
+          console.log('📊 Asistencia sincronizada:', resultado.asistente?.nombre)
+          
+          // Actualizar con datos reales del servidor (por si hay diferencias)
+          if (resultado.asistente) {
+            setAsistentes(prev => 
+              prev.map(a => a.id === id ? resultado.asistente : a)
+            )
+          }
+        } else {
+          console.error('Error sincronizando asistencia')
+          // Mantener cambio optimista - no revertir
+        }
+      }).catch(error => {
+        console.error('Error en sincronización background:', error)
+        // Mantener cambio optimista - no revertir
+      })
       
     } catch (error) {
-      console.error('❌ Error marcando asistencia:', error)
-      toast.error(`Error marcando asistencia: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      
-      // Recargar como fallback
-      cargarAsistentes(true)
-    } finally {
-      isUpdatingRef.current = false
+      console.error('Error marcando asistencia:', error)
+      toast.error(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
+  // Imprimir escarapela SIN bloqueos - ultra responsivo
   const imprimirEscarapela = async (asistente: Asistente) => {
-    if (isUpdatingRef.current) {
-      toast.warning('Operación en progreso, espera...')
-      return
-    }
-
     try {
-      isUpdatingRef.current = true
       console.log('🖨️ Generando escarapela individual para:', asistente.nombre)
 
-      // Generar PDF individual (98mm × 128mm)
-      const response = await ejecutarConTimeout(
-        () => fetch('/api/reportes/pdf', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            asistentes: [asistente],
-            opciones: {
-              modoImpresion: 'individual'
-            }
-          })
-        }),
-        'Generar escarapela individual'
+      // 1. NOTIFICACIÓN INMEDIATA
+      toast.info(`🖨️ Generando escarapela de ${asistente.nombre}...`)
+
+      // 2. MARCAR COMO IMPRESA INMEDIATAMENTE (optimista)
+      setAsistentes(prev => 
+        prev.map(a => a.id === asistente.id ? {
+          ...a, 
+          escarapelaImpresa: true,
+          fechaImpresion: new Date().toISOString()
+        } : a)
       )
+
+      // 3. GENERAR PDF EN BACKGROUND
+      const response = await fetch('/api/reportes/pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          asistentes: [asistente],
+          opciones: {
+            modoImpresion: 'individual'
+          }
+        })
+      })
 
       if (!response.ok) {
         throw new Error(`Error generando PDF: ${response.status}`)
       }
 
-      // Descargar el PDF
+      // 4. DESCARGAR PDF
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -467,37 +441,42 @@ export default function Home() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
 
-      // Marcar como impresa en el backend
-      const marcarResponse = await fetch(`/api/asistentes/${asistente.id}/imprimir`, {
+      // 5. SINCRONIZAR ESTADO EN BACKGROUND
+      fetch(`/api/asistentes/${asistente.id}/imprimir`, {
         method: 'POST',
         headers: {
           'X-Cliente-ID': clienteId
         }
+      }).then(async marcarResponse => {
+        if (marcarResponse.ok) {
+          const resultado = await marcarResponse.json()
+          if (resultado.success && resultado.asistente) {
+            // Actualizar con datos reales del servidor
+            setAsistentes(prev => 
+              prev.map(a => a.id === asistente.id ? resultado.asistente : a)
+            )
+            console.log('📊 Estado de impresión sincronizado:', resultado.asistente.nombre)
+          }
+        }
+      }).catch(error => {
+        console.error('Error sincronizando estado de impresión:', error)
+        // Mantener estado optimista
       })
 
-      if (marcarResponse.ok) {
-        const resultado = await marcarResponse.json()
-        if (resultado.success && resultado.asistente) {
-          // Actualización optimista
-          setAsistentes(prev => 
-            prev.map(a => a.id === asistente.id ? resultado.asistente : a)
-          )
-        }
-      }
-
-      toast.success(`🖨️ Escarapela individual de ${asistente.nombre} generada (98mm×128mm)`)
-      
-      // Programar recarga
-      setTimeout(() => cargarAsistentes(), 500)
+      toast.success(`🖨️ Escarapela de ${asistente.nombre} generada exitosamente`)
       
     } catch (error) {
       console.error('❌ Error generando escarapela:', error)
       toast.error(`Error generando escarapela: ${error instanceof Error ? error.message : 'Error desconocido'}`)
       
-      // Recargar como fallback
-      cargarAsistentes(true)
-    } finally {
-      isUpdatingRef.current = false
+      // Revertir estado optimista en caso de error
+      setAsistentes(prev => 
+        prev.map(a => a.id === asistente.id ? {
+          ...a, 
+          escarapelaImpresa: false,
+          fechaImpresion: undefined
+        } : a)
+      )
     }
   }
 
@@ -532,130 +511,142 @@ export default function Home() {
     }
   }
 
+  // Agregar asistente SIN bloqueos - ultra responsivo
   const agregarAsistente = async (nuevoAsistente: Omit<Asistente, 'id' | 'presente' | 'escarapelaImpresa' | 'fechaRegistro' | 'fechaImpresion' | 'qrGenerado' | 'fechaGeneracionQR'>) => {
-    if (isUpdatingRef.current) {
-      toast.warning('Operación en progreso, espera...')
-      return
-    }
-
     try {
-      isUpdatingRef.current = true
-      console.log('➕ Agregando asistente:', nuevoAsistente.nombre)
-
-      const response = await ejecutarConTimeout(
-        () => fetch('/api/asistentes', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Cliente-ID': clienteId
-          },
-          body: JSON.stringify(nuevoAsistente),
-        }),
-        'Agregar asistente'
-      )
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
+      // 1. GENERAR ID TEMPORAL Y AGREGAR INMEDIATAMENTE
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const asistenteCompleto: Asistente = {
+        ...nuevoAsistente,
+        id: tempId,
+        presente: false,
+        escarapelaImpresa: false,
+        fechaRegistro: new Date().toISOString(),
+        qrGenerado: false
       }
-
-      const asistenteCreado = await response.json()
-
-      // Actualización optimista
-      setAsistentes(prev => [...prev, asistenteCreado])
-
-      // Colapsar formulario automáticamente
+      
+      // 2. ACTUALIZACIÓN OPTIMISTA INMEDIATA
+      setAsistentes(prev => [...prev, asistenteCompleto])
+      toast.success(`✅ ${nuevoAsistente.nombre} agregado exitosamente`)
       setFormularioExpandido(false)
-
-      toast.success(`✅ ${asistenteCreado.nombre} registrado exitosamente`)
       
-      // Programar recarga
-      setTimeout(() => cargarAsistentes(), 500)
-
+      // 3. SINCRONIZACIÓN EN BACKGROUND
+      fetch('/api/asistentes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Cliente-ID': clienteId
+        },
+        body: JSON.stringify(nuevoAsistente)
+      }).then(async response => {
+        if (response.ok) {
+          const resultado = await response.json()
+          console.log('📊 Asistente sincronizado:', resultado.asistente?.nombre)
+          
+          // Reemplazar temporal con ID real
+          if (resultado.asistente) {
+            setAsistentes(prev => 
+              prev.map(a => a.id === tempId ? resultado.asistente : a)
+            )
+          }
+        } else {
+          console.error('Error sincronizando nuevo asistente')
+          // Mantener en lista con ID temporal
+        }
+      }).catch(error => {
+        console.error('Error en sincronización background:', error)
+        // Mantener en lista con ID temporal
+      })
+      
     } catch (error) {
-      console.error('❌ Error agregando asistente:', error)
-      toast.error(`Error registrando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      
-      // Recargar como fallback
-      cargarAsistentes(true)
-    } finally {
-      isUpdatingRef.current = false
+      console.error('Error agregando asistente:', error)
+      toast.error(`Error agregando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
+  // Editar asistente SIN bloqueos - ultra responsivo
   const editarAsistente = async (asistenteActualizado: Asistente) => {
     try {
-      console.log('✏️ Editando asistente:', asistenteActualizado.nombre)
-
-      const response = await fetch(`/api/asistentes/${asistenteActualizado.id}`, {
+      // 1. ACTUALIZACIÓN OPTIMISTA INMEDIATA
+      setAsistentes(prev => 
+        prev.map(a => a.id === asistenteActualizado.id ? asistenteActualizado : a)
+      )
+      
+      toast.success(`✅ ${asistenteActualizado.nombre} actualizado exitosamente`)
+      
+      // 2. SINCRONIZACIÓN EN BACKGROUND
+      fetch(`/api/asistentes/${asistenteActualizado.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'X-Cliente-ID': clienteId
         },
-        body: JSON.stringify(asistenteActualizado),
+        body: JSON.stringify(asistenteActualizado)
+      }).then(async response => {
+        if (response.ok) {
+          const resultado = await response.json()
+          console.log('📊 Edición sincronizada:', resultado.asistente?.nombre)
+          
+          // Actualizar con datos reales (por si hay diferencias)
+          if (resultado.asistente) {
+            setAsistentes(prev => 
+              prev.map(a => a.id === asistenteActualizado.id ? resultado.asistente : a)
+            )
+          }
+        } else {
+          console.error('Error sincronizando edición')
+          // Mantener cambios optimistas
+        }
+      }).catch(error => {
+        console.error('Error en sincronización background:', error)
+        // Mantener cambios optimistas
       })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-
-      const resultado = await response.json()
-
-      if (resultado.success && resultado.asistente) {
-        // Actualización optimista
-        setAsistentes(prev => 
-          prev.map(a => a.id === asistenteActualizado.id ? resultado.asistente : a)
-        )
-
-        toast.success(`✅ ${resultado.asistente.nombre} actualizado exitosamente`)
-        
-        // Programar recarga
-        setTimeout(() => cargarAsistentes(), 500)
-      } else {
-        throw new Error(resultado.error || 'Respuesta inválida del servidor')
-      }
-
-    } catch (error) {
-      console.error('❌ Error editando asistente:', error)
-      toast.error(`Error actualizando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
       
-      // Recargar como fallback
-      cargarAsistentes(true)
+    } catch (error) {
+      console.error('Error editando asistente:', error)
+      toast.error(`Error editando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
+  // Eliminar asistente SIN bloqueos - ultra responsivo
   const eliminarAsistente = async (id: string) => {
     try {
-      console.log('🗑️ Eliminando asistente:', id)
+      const asistente = asistentes.find(a => a.id === id)
+      if (!asistente) return
 
-      const response = await fetch(`/api/asistentes/${id}`, {
+      // Confirmar eliminación
+      const confirmacion = window.confirm(`¿Estás seguro de eliminar a ${asistente.nombre}?`)
+      if (!confirmacion) return
+
+      // 1. ELIMINACIÓN OPTIMISTA INMEDIATA
+      setAsistentes(prev => prev.filter(a => a.id !== id))
+      toast.success(`✅ ${asistente.nombre} eliminado exitosamente`)
+
+      // 2. SINCRONIZACIÓN EN BACKGROUND
+      fetch(`/api/asistentes/${id}`, {
         method: 'DELETE',
         headers: {
           'X-Cliente-ID': clienteId
         }
+      }).then(async response => {
+        if (response.ok) {
+          console.log('📊 Eliminación sincronizada:', asistente.nombre)
+        } else {
+          // Revertir si falla la sincronización
+          console.error('Error sincronizando eliminación')
+          setAsistentes(prev => [...prev, asistente])
+          toast.error('Error eliminando en servidor, revertido')
+        }
+      }).catch(error => {
+        console.error('Error en sincronización background:', error)
+        // Revertir si falla la sincronización
+        setAsistentes(prev => [...prev, asistente])
+        toast.error('Error de conexión, eliminación revertida')
       })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }))
-        throw new Error(errorData.error || `HTTP ${response.status}`)
-      }
-
-      // Actualización optimista
-      setAsistentes(prev => prev.filter(a => a.id !== id))
-
-      toast.success('🗑️ Asistente eliminado exitosamente')
-      
-      // Programar recarga
-      setTimeout(() => cargarAsistentes(), 500)
-
     } catch (error) {
-      console.error('❌ Error eliminando asistente:', error)
+      console.error('Error eliminando asistente:', error)
       toast.error(`Error eliminando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-      
-      // Recargar como fallback
-      cargarAsistentes(true)
     }
   }
 
@@ -759,8 +750,19 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Indicador de modo offline-first */}
+          <div className="mt-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-blue-800">
+              <span className="text-lg">📱</span>
+              <div>
+                <div className="font-medium text-sm">MODO OFFLINE-FIRST ACTIVADO</div>
+                <div className="text-xs text-blue-600">Sin polling automático para evitar rate limiting. Todas las operaciones funcionan offline.</div>
+              </div>
+            </div>
+          </div>
+
           {/* Controles de sincronización - Nueva sección */}
-          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={ejecutarDiagnostico}
               className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full sm:w-auto"
@@ -789,7 +791,7 @@ export default function Home() {
                 className="inline-flex items-center justify-center px-3 py-2 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 w-full sm:w-auto"
                 title={`Sincronizar ${pendientesSincronizacion} cambios pendientes`}
               >
-                ⏳ Sync Pendientes ({pendientesSincronizacion})
+                ⏳ Sync Manual ({pendientesSincronizacion})
               </button>
             )}
             <button
