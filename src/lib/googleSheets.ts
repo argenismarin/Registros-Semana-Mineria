@@ -45,20 +45,28 @@ class GoogleSheetsService {
 
       const rows = response.data.values || []
       
-      return rows.map((row, index): Asistente => ({
-        id: row[0] || `generated-${index}`,
-        nombre: row[1] || '',
-        email: row[2] || '',
-        cargo: row[3] || '',
-        empresa: row[4] || '',
-        presente: row[5] === 'TRUE' || row[5] === 'true',
-        escarapelaImpresa: row[6] === 'TRUE' || row[6] === 'true',
-        fechaRegistro: row[7] || new Date().toISOString(),
-        horaLlegada: row[8] || undefined,
-        fechaImpresion: row[9] || undefined,
-      }))
+      if (rows.length === 0) {
+        console.log('📊 Google Sheets está vacío, no hay asistentes para cargar')
+        return []
+      }
+      
+      return rows
+        .filter(row => row && row.length > 0 && row[0] && row[1]) // Filtrar filas vacías o sin ID/nombre
+        .map((row, index): Asistente => ({
+          id: row[0] || `generated-${Date.now()}-${index}`,
+          nombre: row[1] || '',
+          email: row[2] || '',
+          cargo: row[3] || '',
+          empresa: row[4] || '',
+          presente: row[5] === 'TRUE' || row[5] === 'true' || row[5] === true,
+          escarapelaImpresa: row[6] === 'TRUE' || row[6] === 'true' || row[6] === true,
+          fechaRegistro: row[7] || new Date().toISOString(),
+          horaLlegada: row[8] || undefined,
+          fechaImpresion: row[9] || undefined,
+        }))
     } catch (error) {
       console.error('Error leyendo Google Sheets:', error)
+      // No lanzar el error, simplemente retornar array vacío
       return []
     }
   }
@@ -230,31 +238,61 @@ class GoogleSheetsService {
   async syncWithMemoryDatabase(memoryAsistentes: Asistente[]): Promise<Asistente[]> {
     try {
       console.log('🔄 Sincronizando con Google Sheets...')
+      
+      // Verificar configuración antes de proceder
+      if (!this.isConfigured()) {
+        console.log('⚠️ Google Sheets no configurado, retornando datos de memoria')
+        return memoryAsistentes
+      }
+      
       const sheetsAsistentes = await this.getAsistentes()
+      console.log(`📊 Obtenidos ${sheetsAsistentes.length} asistentes de Google Sheets`)
+      
+      // Si no hay datos en Sheets pero hay en memoria, usar memoria
+      if (sheetsAsistentes.length === 0 && memoryAsistentes.length > 0) {
+        console.log('📝 Google Sheets vacío, usando datos de memoria')
+        return memoryAsistentes
+      }
+      
+      // Si no hay datos en memoria pero hay en Sheets, usar Sheets
+      if (memoryAsistentes.length === 0 && sheetsAsistentes.length > 0) {
+        console.log('📝 Memoria vacía, usando datos de Google Sheets')
+        return sheetsAsistentes
+      }
+      
+      // Si no hay datos en ningún lado, retornar array vacío
+      if (sheetsAsistentes.length === 0 && memoryAsistentes.length === 0) {
+        console.log('📝 No hay datos en memoria ni en Google Sheets')
+        return []
+      }
       
       // Combinar datos - priorizar los datos más recientes
       const merged = new Map<string, Asistente>()
       
       // Agregar datos de Sheets primero
       sheetsAsistentes.forEach(asistente => {
-        merged.set(asistente.id, asistente)
+        if (asistente && asistente.id) {
+          merged.set(asistente.id, asistente)
+        }
       })
       
       // Sobrescribir con datos de memoria (más recientes)
       const updatePromises: Promise<boolean>[] = []
       
       memoryAsistentes.forEach(asistente => {
+        if (!asistente || !asistente.id) return // Saltar asistentes inválidos
+        
         const existing = merged.get(asistente.id)
         
         // Si no existe en Sheets o los datos de memoria son más recientes
         if (!existing || 
-            new Date(asistente.fechaRegistro) >= new Date(existing.fechaRegistro) ||
+            new Date(asistente.fechaRegistro) >= new Date(existing.fechaRegistro || 0) ||
             asistente.presente !== existing.presente ||
             asistente.escarapelaImpresa !== existing.escarapelaImpresa) {
           
           merged.set(asistente.id, asistente)
           
-          // Agregar promesa de actualización
+          // Agregar promesa de actualización solo si hay diferencias significativas
           if (existing) {
             updatePromises.push(this.updateAsistente(asistente))
           } else {
@@ -266,12 +304,20 @@ class GoogleSheetsService {
       // Ejecutar todas las actualizaciones en paralelo
       if (updatePromises.length > 0) {
         console.log(`📊 Actualizando ${updatePromises.length} registros en Google Sheets...`)
-        await Promise.allSettled(updatePromises)
+        try {
+          await Promise.allSettled(updatePromises)
+        } catch (updateError) {
+          console.warn('⚠️ Algunos registros no se pudieron actualizar en Google Sheets:', updateError)
+        }
       }
       
-      return Array.from(merged.values())
+      const resultado = Array.from(merged.values())
+      console.log(`✅ Sincronización completada: ${resultado.length} asistentes combinados`)
+      return resultado
+      
     } catch (error) {
       console.error('Error sincronizando con Google Sheets:', error)
+      console.log('📝 Usando datos de memoria como fallback')
       return memoryAsistentes // Fallback a datos en memoria
     }
   }

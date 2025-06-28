@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { v4 as uuidv4 } from 'uuid'
-import db, { type Asistente, inicializarDatosPrueba } from '@/lib/database'
+import db, { type Asistente } from '@/lib/database'
 import googleSheetsService from '@/lib/googleSheets'
 
-// Inicializar datos de prueba si la base de datos está vacía
-let datosInicializados = false
-
-function asegurarDatosPrueba() {
-  if (!datosInicializados && db.getAsistentes().length === 0) {
-    console.log('🔄 Base de datos vacía, inicializando datos de prueba...')
-    inicializarDatosPrueba()
-    datosInicializados = true
-  }
-}
+// Base de datos sin datos de prueba automáticos
 
 // Sincronización con Google Sheets
 async function sincronizarConGoogleSheets(asistente: Asistente) {
@@ -32,9 +23,6 @@ export async function GET() {
   try {
     console.log('🔄 GET /api/asistentes - Obteniendo lista de asistentes')
     
-    // Asegurar que hay datos de prueba
-    asegurarDatosPrueba()
-    
     // Obtener asistentes de memoria local
     const memoryAsistentes = db.getAsistentes()
     
@@ -46,15 +34,20 @@ export async function GET() {
         // Usar el método de sincronización bidireccional
         const sincronizados = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
         
-        // Actualizar la base de datos local con los datos sincronizados
-        // Esto asegura que los checkboxes de Google Sheets tengan prioridad
-        db.limpiarTodo()
-        sincronizados.forEach(asistente => {
-          db.addAsistente(asistente)
-        })
-        
-        console.log(`✅ ${sincronizados.length} asistentes sincronizados con Google Sheets`)
-        return NextResponse.json(sincronizados)
+        // Solo actualizar si hay datos sincronizados válidos
+        if (sincronizados && sincronizados.length > 0) {
+          // Actualizar la base de datos local con los datos sincronizados
+          // Esto asegura que los checkboxes de Google Sheets tengan prioridad
+          db.limpiarTodo()
+          sincronizados.forEach(asistente => {
+            db.addAsistente(asistente)
+          })
+          
+          console.log(`✅ ${sincronizados.length} asistentes sincronizados con Google Sheets`)
+          return NextResponse.json(sincronizados)
+        } else {
+          console.log('📝 No hay datos en Google Sheets, usando memoria local')
+        }
         
       } catch (sheetsError) {
         console.error('❌ Error sincronizando con Google Sheets:', sheetsError)

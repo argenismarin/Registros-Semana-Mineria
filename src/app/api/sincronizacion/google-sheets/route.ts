@@ -20,27 +20,35 @@ export async function POST() {
     // Sincronizar con Google Sheets
     const sincronizados = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
     
-    // Limpiar y actualizar la base de datos local
-    db.limpiarTodo()
-    sincronizados.forEach(asistente => {
-      db.addAsistente(asistente)
-    })
+    // Solo actualizar la base de datos si hay datos sincronizados
+    if (sincronizados && sincronizados.length > 0) {
+      // Limpiar y actualizar la base de datos local
+      db.limpiarTodo()
+      sincronizados.forEach(asistente => {
+        db.addAsistente(asistente)
+      })
+    } else if (memoryAsistentes.length === 0) {
+      // Si no hay datos en memoria ni en Sheets, no hacer nada
+      console.log('📝 No hay datos para sincronizar')
+    }
 
     // Calcular estadísticas de sincronización
-    const escarapelasImpresas = sincronizados.filter(a => a.escarapelaImpresa).length
-    const escarapelasPendientes = sincronizados.length - escarapelasImpresas
+    const datosFinales = db.getAsistentes() // Obtener datos actuales después de sincronización
+    const escarapelasImpresas = datosFinales.filter(a => a.escarapelaImpresa).length
+    const escarapelasPendientes = datosFinales.length - escarapelasImpresas
 
-    console.log(`✅ Sincronización completada: ${sincronizados.length} asistentes sincronizados`)
+    console.log(`✅ Sincronización completada: ${datosFinales.length} asistentes en total`)
     
     return NextResponse.json({
       success: true,
       message: 'Sincronización con Google Sheets completada exitosamente',
       estadisticas: {
-        totalAsistentes: sincronizados.length,
+        totalAsistentes: datosFinales.length,
         enMemoriaAntes: memoryAsistentes.length,
+        sincronizadosDesdeSheets: (sincronizados && sincronizados.length) || 0,
         escarapelasImpresas,
         escarapelasPendientes,
-        porcentajeImpresas: sincronizados.length > 0 ? Math.round((escarapelasImpresas / sincronizados.length) * 100) : 0
+        porcentajeImpresas: datosFinales.length > 0 ? Math.round((escarapelasImpresas / datosFinales.length) * 100) : 0
       },
       configurado: true,
       fechaSincronizacion: new Date().toISOString()
