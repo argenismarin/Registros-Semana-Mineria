@@ -25,14 +25,14 @@ export async function POST(
 
     console.log('👤 Asistente encontrado:', asistenteExistente.nombre)
     
-    // Marcar como presente y registrar hora de llegada
+    // 1. ACTUALIZAR EN MEMORIA LOCAL PRIMERO (esto marca como no sincronizado)
     const asistenteActualizado = db.updateAsistente(id, {
       presente: true,
       horaLlegada: new Date().toISOString()
     })
     
     if (!asistenteActualizado) {
-      console.log('❌ Error actualizando asistente')
+      console.log('❌ Error actualizando asistente en memoria')
       return NextResponse.json(
         { 
           success: false,
@@ -42,53 +42,68 @@ export async function POST(
       )
     }
 
-    console.log('✅ Asistente actualizado:', asistenteActualizado)
+    console.log('✅ Asistente actualizado en memoria (pendiente sincronización):', asistenteActualizado.nombre)
 
-    // 🆕 SINCRONIZAR CON GOOGLE SHEETS DE FORMA OPTIMIZADA
+    // 2. SINCRONIZAR CON GOOGLE SHEETS DE FORMA OPTIMIZADA (USANDO BATCH)
+    let syncSuccess = false
     if (googleSheetsService.isConfigured()) {
       try {
-        // Usar método optimizado para actualizar solo el estado de asistencia
-        const syncSuccess = await googleSheetsService.updateAsistenciaStatus(
-          id, 
-          true, 
-          asistenteActualizado.horaLlegada
-        )
+        // Usar método optimizado con batching - se procesa automáticamente en lotes
+        syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, true)
         
         if (syncSuccess) {
-          console.log('📊 ✅ Asistencia sincronizada exitosamente con Google Sheets:', asistenteActualizado.nombre)
+          // 3. MARCAR COMO SINCRONIZADO (el batching lo sincronizará realmente después)
+          console.log('📦 ✅ Asistencia agregada al lote para sincronización:', asistenteActualizado.nombre)
         } else {
-          console.log('📊 ⚠️ Sincronización parcial - usando método completo como respaldo')
-          // Fallback al método completo si el optimizado falla
-          await googleSheetsService.updateAsistente(asistenteActualizado)
+          console.log('📊 ⚠️ Error agregando al lote - intentando sincronización inmediata')
+          // Fallback: sincronización inmediata si el batch falla
+          syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, false)
+          if (syncSuccess) {
+            db.markAsSynced(id)
+            console.log('📊 ✅ Asistencia sincronizada inmediatamente:', asistenteActualizado.nombre)
+          }
         }
       } catch (error) {
         console.error('⚠️ Error sincronizando asistencia con Google Sheets:', error)
-        // No fallar la respuesta por esto, pero logearlo
+        syncSuccess = false
+        // NO retornar error aquí - el cambio se mantiene en memoria local para sincronización posterior
       }
     } else {
       console.log('⚠️ Google Sheets no configurado, asistencia solo en memoria local')
     }
 
-    // Notificar a otros clientes vía Socket.io (no bloquear respuesta)
-    fetch('/api/socket.io', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'asistencia-marcada',
-        data: { 
-          asistente: asistenteActualizado,
-          device: 'Manual'
-        }
+    // 4. NOTIFICAR A OTROS CLIENTES VÍA SOCKET.IO (no bloquear respuesta)
+    try {
+      await fetch(`${request.nextUrl.origin}/api/socket.io`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'asistencia-marcada',
+          data: { 
+            asistente: asistenteActualizado,
+            device: 'Manual',
+            sincronizado: syncSuccess
+          }
+        })
       })
-    }).catch(error => {
+    } catch (error) {
       console.error('⚠️ Error notificando via socket (no crítico):', error)
-    })
+    }
 
-    return NextResponse.json({
+    // 5. RESPUESTA SIEMPRE EXITOSA SI SE GUARDÓ EN MEMORIA
+    const respuesta = {
       success: true,
       asistente: asistenteActualizado,
-      message: `${asistenteActualizado.nombre} marcado como presente`
-    })
+      message: `${asistenteActualizado.nombre} marcado como presente`,
+      sincronizado: syncSuccess,
+      pendientesSync: db.hasPendingChanges() ? db.getPendingSyncAsistentes().length : 0
+    }
+
+    if (!syncSuccess && googleSheetsService.isConfigured()) {
+      respuesta.message += ' (sincronización pendiente)'
+    }
+
+    return NextResponse.json(respuesta)
     
   } catch (error) {
     console.error('❌ Error marcando asistencia:', error)

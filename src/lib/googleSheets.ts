@@ -6,6 +6,16 @@ class GoogleSheetsService {
   private sheets: sheets_v4.Sheets | null = null
   private spreadsheetId: string
   private auth: GoogleAuth
+  
+  // Rate limiting y control de solicitudes
+  private lastRequestTime: number = 0
+  private requestQueue: (() => Promise<any>)[] = []
+  private isProcessingQueue: boolean = false
+  private readonly MIN_REQUEST_INTERVAL = 2000 // 2 segundos entre solicitudes
+  private readonly MAX_BATCH_SIZE = 10 // Máximo 10 elementos por lote
+  private pendingBatchUpdates: Map<string, Asistente> = new Map()
+  private batchTimeout: NodeJS.Timeout | null = null
+  private readonly BATCH_DELAY = 5000 // 5 segundos para agrupar cambios
 
   constructor() {
     this.spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || ''
@@ -37,43 +47,31 @@ class GoogleSheetsService {
     return false
   }
 
-  // Leer todos los asistentes desde Google Sheets
+  // Obtener asistentes con rate limiting
   async getAsistentes(): Promise<Asistente[]> {
-    try {
-      if (!this.spreadsheetId) {
-        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
-        return []
-      }
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return []
+        }
 
-      const sheets = await this.initializeSheets()
-      
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: 'Asistentes!A2:J', // Desde fila 2 para omitir headers
-      })
+        await this.ensureSheetExists()
+        const sheets = await this.initializeSheets()
 
-      const rows = response.data.values || []
-      
-      if (rows.length === 0) {
-        console.log('📊 Google Sheets está vacío, no hay asistentes para cargar')
-        return []
-      }
-      
-      console.log(`📊 Procesando ${rows.length} filas de Google Sheets`)
-      
-      const asistentes = rows
-        .filter((row, index) => {
-          // Filtrar solo filas completamente vacías
-          const hasContent = row && row.length > 0 && (row[0] || row[1])
-          if (!hasContent) {
-            console.log(`⚠️ Fila ${index + 2} vacía, saltando...`)
-          }
-          return hasContent
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: this.spreadsheetId,
+          range: 'Asistentes!A2:J',
         })
-        .map((row, index): Asistente => {
-          const asistente = {
-            id: row[0] || `generated-${Date.now()}-${index}`,
-            nombre: row[1] || '',
+
+        const rows = response.data.values || []
+        console.log(`📊 Obtenidos ${rows.length} registros de Google Sheets`)
+
+        return rows
+          .filter(row => row && row.length >= 6 && row[0] && row[1])
+          .map((row): Asistente => ({
+            id: row[0],
+            nombre: row[1],
             email: row[2] || '',
             cargo: row[3] || '',
             empresa: row[4] || '',
@@ -82,116 +80,114 @@ class GoogleSheetsService {
             fechaRegistro: row[7] || new Date().toISOString(),
             horaLlegada: row[8] || undefined,
             fechaImpresion: row[9] || undefined,
-          }
-          
-          console.log(`📝 Procesado: ${asistente.nombre} (ID: ${asistente.id}) - Impresa: ${asistente.escarapelaImpresa}`)
-          return asistente
-        })
-      
-      console.log(`✅ ${asistentes.length} asistentes procesados exitosamente`)
-      return asistentes
-    } catch (error) {
-      console.error('Error leyendo Google Sheets:', error)
-      // No lanzar el error, simplemente retornar array vacío
-      return []
-    }
+            qrGenerado: false,
+            ultimaModificacion: row[7] || new Date().toISOString(),
+            sincronizado: true,
+            dispositivoOrigen: 'sheets'
+          }))
+      } catch (error) {
+        console.error('Error obteniendo asistentes de Google Sheets:', error)
+        return []
+      }
+    })
   }
 
-  // Agregar un nuevo asistente a Google Sheets
+  // Agregar asistente con rate limiting
   async addAsistente(asistente: Asistente): Promise<boolean> {
-    try {
-      if (!this.spreadsheetId) {
-        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return false
+        }
+
+        await this.ensureSheetExists()
+        const sheets = await this.initializeSheets()
+
+        const values = [[
+          asistente.id,
+          asistente.nombre,
+          asistente.email || '',
+          asistente.cargo || '',
+          asistente.empresa || '',
+          asistente.presente,
+          asistente.escarapelaImpresa,
+          asistente.fechaRegistro,
+          asistente.horaLlegada || '',
+          asistente.fechaImpresion || '',
+        ]]
+
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: this.spreadsheetId,
+          range: 'Asistentes!A2:J',
+          valueInputOption: 'RAW',
+          requestBody: {
+            values,
+          },
+        })
+
+        console.log(`✅ Asistente ${asistente.nombre} agregado a Google Sheets`)
+        return true
+      } catch (error) {
+        console.error('Error agregando asistente a Google Sheets:', error)
         return false
       }
-
-      const sheets = await this.initializeSheets()
-      
-      // Primero verificar si existe la hoja, si no, crearla
-      await this.ensureSheetExists()
-      
-      const values = [[
-        asistente.id,
-        asistente.nombre,
-        asistente.email || '',
-        asistente.cargo || '',
-        asistente.empresa || '',
-        asistente.presente,
-        asistente.escarapelaImpresa,
-        asistente.fechaRegistro,
-        asistente.horaLlegada || '',
-        asistente.fechaImpresion || '',
-      ]]
-
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: this.spreadsheetId,
-        range: 'Asistentes!A2:J',
-        valueInputOption: 'RAW',
-        requestBody: {
-          values,
-        },
-      })
-
-      return true
-    } catch (error) {
-      console.error('Error agregando asistente a Google Sheets:', error)
-      return false
-    }
+    })
   }
 
-  // Actualizar un asistente en Google Sheets
+  // Actualizar asistente simple con rate limiting (para uso individual)
   async updateAsistente(asistente: Asistente): Promise<boolean> {
-    try {
-      if (!this.spreadsheetId) {
-        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return false
+        }
+
+        const sheets = await this.initializeSheets()
+        
+        const allData = await sheets.spreadsheets.values.get({
+          spreadsheetId: this.spreadsheetId,
+          range: 'Asistentes!A2:J',
+        })
+
+        const rows = allData.data.values || []
+        const rowIndex = rows.findIndex(row => row[0] === asistente.id)
+        
+        if (rowIndex === -1) {
+          console.error('Asistente no encontrado en Google Sheets')
+          return false
+        }
+
+        const updateRange = `Asistentes!A${rowIndex + 2}:J${rowIndex + 2}`
+        const values = [[
+          asistente.id,
+          asistente.nombre,
+          asistente.email || '',
+          asistente.cargo || '',
+          asistente.empresa || '',
+          asistente.presente,
+          asistente.escarapelaImpresa,
+          asistente.fechaRegistro,
+          asistente.horaLlegada || '',
+          asistente.fechaImpresion || '',
+        ]]
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: this.spreadsheetId,
+          range: updateRange,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values,
+          },
+        })
+
+        return true
+      } catch (error) {
+        console.error('Error actualizando asistente en Google Sheets:', error)
         return false
       }
-
-      const sheets = await this.initializeSheets()
-      
-      // Buscar la fila del asistente
-      const allData = await sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: 'Asistentes!A2:J',
-      })
-
-      const rows = allData.data.values || []
-      const rowIndex = rows.findIndex(row => row[0] === asistente.id)
-      
-      if (rowIndex === -1) {
-        console.error('Asistente no encontrado en Google Sheets')
-        return false
-      }
-
-      // Actualizar la fila (rowIndex + 2 porque empezamos en A2)
-      const updateRange = `Asistentes!A${rowIndex + 2}:J${rowIndex + 2}`
-      const values = [[
-        asistente.id,
-        asistente.nombre,
-        asistente.email || '',
-        asistente.cargo || '',
-        asistente.empresa || '',
-        asistente.presente,
-        asistente.escarapelaImpresa,
-        asistente.fechaRegistro,
-        asistente.horaLlegada || '',
-        asistente.fechaImpresion || '',
-      ]]
-
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: this.spreadsheetId,
-        range: updateRange,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values,
-        },
-      })
-
-      return true
-    } catch (error) {
-      console.error('Error actualizando asistente en Google Sheets:', error)
-      return false
-    }
+    })
   }
 
   // Buscar un asistente por ID en Google Sheets
@@ -519,52 +515,52 @@ class GoogleSheetsService {
 
   // Método optimizado para actualizar solo el estado de presente
   async updateAsistenciaStatus(asistenteId: string, presente: boolean, horaLlegada?: string): Promise<boolean> {
-    try {
-      if (!this.spreadsheetId) {
-        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return false
+        }
+
+        const sheets = await this.initializeSheets()
+        
+        const allData = await sheets.spreadsheets.values.get({
+          spreadsheetId: this.spreadsheetId,
+          range: 'Asistentes!A2:J',
+        })
+
+        const rows = allData.data.values || []
+        const rowIndex = rows.findIndex(row => row[0] === asistenteId)
+        
+        if (rowIndex === -1) {
+          console.error('Asistente no encontrado en Google Sheets para actualización de asistencia')
+          return false
+        }
+
+        const updateRange = `Asistentes!F${rowIndex + 2}:I${rowIndex + 2}`
+        const values = [[
+          presente,
+          rows[rowIndex][6] || false,
+          rows[rowIndex][7] || new Date().toISOString(),
+          horaLlegada || rows[rowIndex][8] || ''
+        ]]
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: this.spreadsheetId,
+          range: updateRange,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values,
+          },
+        })
+
+        console.log(`✅ Estado de asistencia actualizado en Google Sheets para ${asistenteId}`)
+        return true
+      } catch (error) {
+        console.error('Error actualizando estado de asistencia en Google Sheets:', error)
         return false
       }
-
-      const sheets = await this.initializeSheets()
-      
-      // Buscar la fila del asistente
-      const allData = await sheets.spreadsheets.values.get({
-        spreadsheetId: this.spreadsheetId,
-        range: 'Asistentes!A2:J',
-      })
-
-      const rows = allData.data.values || []
-      const rowIndex = rows.findIndex(row => row[0] === asistenteId)
-      
-      if (rowIndex === -1) {
-        console.error('Asistente no encontrado en Google Sheets para actualización de asistencia')
-        return false
-      }
-
-      // Actualizar solo las columnas de presente y hora de llegada (columnas F y I)
-      const updateRange = `Asistentes!F${rowIndex + 2}:I${rowIndex + 2}`
-      const values = [[
-        presente, // Columna F (presente)
-        rows[rowIndex][6] || false, // Columna G (escarapelaImpresa) - mantener valor existente
-        rows[rowIndex][7] || new Date().toISOString(), // Columna H (fechaRegistro) - mantener valor existente
-        horaLlegada || rows[rowIndex][8] || '' // Columna I (horaLlegada) - actualizar si se proporciona
-      ]]
-
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: this.spreadsheetId,
-        range: updateRange,
-        valueInputOption: 'RAW',
-        requestBody: {
-          values,
-        },
-      })
-
-      console.log(`✅ Estado de asistencia actualizado en Google Sheets para ${asistenteId}`)
-      return true
-    } catch (error) {
-      console.error('Error actualizando estado de asistencia en Google Sheets:', error)
-      return false
-    }
+    })
   }
 
   // Validar configuración
@@ -574,6 +570,271 @@ class GoogleSheetsService {
       process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
       process.env.GOOGLE_PRIVATE_KEY
     )
+  }
+
+  // Rate limiting wrapper para todas las solicitudes
+  private async executeWithRateLimit<T>(operation: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.requestQueue.push(async () => {
+        try {
+          const now = Date.now()
+          const timeSinceLastRequest = now - this.lastRequestTime
+          
+          if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
+            const delay = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest
+            console.log(`⏳ Rate limiting: esperando ${delay}ms`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+          }
+          
+          this.lastRequestTime = Date.now()
+          const result = await operation()
+          resolve(result)
+        } catch (error) {
+          reject(error)
+        }
+      })
+      
+      this.processQueue()
+    })
+  }
+
+  // Procesar cola de solicitudes una por una
+  private async processQueue(): Promise<void> {
+    if (this.isProcessingQueue || this.requestQueue.length === 0) {
+      return
+    }
+    
+    this.isProcessingQueue = true
+    
+    while (this.requestQueue.length > 0) {
+      const operation = this.requestQueue.shift()
+      if (operation) {
+        try {
+          await operation()
+        } catch (error) {
+          console.error('Error en operación de cola:', error)
+        }
+      }
+    }
+    
+    this.isProcessingQueue = false
+  }
+
+  // Agregar cambio al lote para procesamiento diferido
+  private addToBatch(asistente: Asistente): void {
+    this.pendingBatchUpdates.set(asistente.id, asistente)
+    console.log(`📦 Agregado al lote: ${asistente.nombre} (${this.pendingBatchUpdates.size} en lote)`)
+    
+    // Resetear timeout del lote
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout)
+    }
+    
+    // Procesar lote si está lleno o después del delay
+    if (this.pendingBatchUpdates.size >= this.MAX_BATCH_SIZE) {
+      console.log('📦 Lote lleno, procesando inmediatamente')
+      this.processBatch()
+    } else {
+      this.batchTimeout = setTimeout(() => {
+        this.processBatch()
+      }, this.BATCH_DELAY)
+    }
+  }
+
+  // Procesar lote de cambios
+  private async processBatch(): Promise<void> {
+    if (this.pendingBatchUpdates.size === 0) return
+    
+    const asistentesToUpdate = Array.from(this.pendingBatchUpdates.values())
+    const count = asistentesToUpdate.length
+    
+    console.log(`📦 Procesando lote de ${count} asistentes...`)
+    
+    // Limpiar lote
+    this.pendingBatchUpdates.clear()
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout)
+      this.batchTimeout = null
+    }
+    
+    try {
+      await this.executeWithRateLimit(async () => {
+        return await this.updateMultipleAsistentes(asistentesToUpdate)
+      })
+      
+      console.log(`✅ Lote de ${count} asistentes procesado exitosamente`)
+    } catch (error) {
+      console.error(`❌ Error procesando lote de ${count} asistentes:`, error)
+      
+      // Reintentarlo uno por uno si el lote falla
+      for (const asistente of asistentesToUpdate) {
+        try {
+          await this.executeWithRateLimit(async () => {
+            return await this.updateAsistente(asistente)
+          })
+        } catch (individualError) {
+          console.error(`❌ Error actualizando individualmente ${asistente.nombre}:`, individualError)
+        }
+      }
+    }
+  }
+
+  // Nuevo método para actualizar múltiples asistentes en una sola solicitud
+  private async updateMultipleAsistentes(asistentes: Asistente[]): Promise<boolean> {
+    try {
+      if (!this.spreadsheetId) {
+        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+        return false
+      }
+
+      const sheets = await this.initializeSheets()
+      
+      // Obtener todos los datos de la hoja
+      const allData = await sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: 'Asistentes!A2:J',
+      })
+
+      const rows = allData.data.values || []
+      const updates: any[] = []
+
+      // Preparar actualizaciones por lotes
+      for (const asistente of asistentes) {
+        const rowIndex = rows.findIndex(row => row[0] === asistente.id)
+        
+        if (rowIndex !== -1) {
+          const range = `Asistentes!A${rowIndex + 2}:J${rowIndex + 2}`
+          const values = [[
+            asistente.id,
+            asistente.nombre,
+            asistente.email || '',
+            asistente.cargo || '',
+            asistente.empresa || '',
+            asistente.presente,
+            asistente.escarapelaImpresa,
+            asistente.fechaRegistro,
+            asistente.horaLlegada || '',
+            asistente.fechaImpresion || '',
+          ]]
+
+          updates.push({
+            range,
+            values
+          })
+        }
+      }
+
+      if (updates.length > 0) {
+        // Usar batchUpdate para múltiples rangos en una sola solicitud
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: {
+            valueInputOption: 'RAW',
+            data: updates
+          }
+        })
+        
+        console.log(`📊 ✅ ${updates.length} asistentes actualizados en lote`)
+      }
+
+      return true
+    } catch (error) {
+      console.error('Error actualizando múltiples asistentes:', error)
+      return false
+    }
+  }
+
+  // Método público optimizado para actualizaciones
+  async updateAsistenteOptimized(asistente: Asistente, useBatch = true): Promise<boolean> {
+    if (useBatch) {
+      // Agregar al lote para procesamiento diferido
+      this.addToBatch(asistente)
+      return true // Retornar inmediatamente, se procesará en lote
+    } else {
+      // Procesar inmediatamente con rate limiting
+      return await this.executeWithRateLimit(async () => {
+        return await this.updateAsistente(asistente)
+      })
+    }
+  }
+
+  // Forzar procesamiento inmediato del lote pendiente
+  async flushBatch(): Promise<void> {
+    if (this.pendingBatchUpdates.size > 0) {
+      console.log(`🚀 Forzando procesamiento de lote: ${this.pendingBatchUpdates.size} elementos`)
+      await this.processBatch()
+    }
+  }
+
+  // Obtener estadísticas del lote
+  getBatchStats(): { pending: number, isProcessing: boolean, queueSize: number } {
+    return {
+      pending: this.pendingBatchUpdates.size,
+      isProcessing: this.isProcessingQueue,
+      queueSize: this.requestQueue.length
+    }
+  }
+
+  // Obtener datos raw de Google Sheets (incluyendo registros sin ID)
+  async getRawSheetData(): Promise<any[][]> {
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return []
+        }
+
+        await this.ensureSheetExists()
+        const sheets = await this.initializeSheets()
+
+        const response = await sheets.spreadsheets.values.get({
+          spreadsheetId: this.spreadsheetId,
+          range: 'Asistentes!A2:J', // Incluir todas las filas, incluso sin ID
+        })
+
+        const rows = response.data.values || []
+        console.log(`📊 Obtenidos ${rows.length} registros RAW de Google Sheets`)
+        
+        return rows
+      } catch (error) {
+        console.error('Error obteniendo datos RAW de Google Sheets:', error)
+        return []
+      }
+    })
+  }
+
+  // Actualizar múltiples rangos en una sola operación batch
+  async batchUpdateSheetData(updates: { range: string; values: any[][] }[]): Promise<boolean> {
+    return await this.executeWithRateLimit(async () => {
+      try {
+        if (!this.spreadsheetId) {
+          console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+          return false
+        }
+
+        if (updates.length === 0) {
+          console.log('No hay actualizaciones para procesar')
+          return true
+        }
+
+        const sheets = await this.initializeSheets()
+
+        // Usar batchUpdate para múltiples rangos
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: {
+            valueInputOption: 'RAW',
+            data: updates
+          }
+        })
+
+        console.log(`📊 ✅ Batch update completado: ${updates.length} rangos actualizados`)
+        return true
+      } catch (error) {
+        console.error('Error en batch update de Google Sheets:', error)
+        return false
+      }
+    })
   }
 }
 

@@ -12,6 +12,10 @@ export interface Asistente {
   fechaImpresion?: string
   qrGenerado?: boolean
   fechaGeneracionQR?: string
+  // Nuevos campos para control de sincronización
+  ultimaModificacion?: string
+  sincronizado?: boolean
+  dispositivoOrigen?: string
 }
 
 interface OperacionConcurrente {
@@ -23,84 +27,171 @@ interface OperacionConcurrente {
 }
 
 class MemoryDatabase {
-  private asistentes: Asistente[] = []
+  private asistentes: Map<string, Asistente> = new Map()
   private operacionesRecientes: OperacionConcurrente[] = []
   private maxOperacionesHistorial = 100
+  private lastSyncTimestamp: string | null = null
+  private pendingSyncQueue: Set<string> = new Set() // IDs pendientes de sincronización
 
   // Obtener todos los asistentes
   getAsistentes(): Asistente[] {
-    console.log(`📊 Obteniendo ${this.asistentes.length} asistentes de la base de datos`)
-    return [...this.asistentes] // Retornar copia para evitar mutaciones
+    return Array.from(this.asistentes.values()).sort((a, b) => 
+      a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase())
+    )
   }
 
   // Buscar asistente por ID
-  findAsistenteById(id: string): Asistente | undefined {
-    const asistente = this.asistentes.find(a => a.id === id)
-    if (asistente) {
-      console.log(`🔍 Asistente encontrado: ${asistente.nombre}`)
-    } else {
-      console.log(`❌ No se encontró asistente con ID: ${id}`)
-    }
-    return asistente
+  findAsistenteById(id: string): Asistente | null {
+    return this.asistentes.get(id) || null
   }
 
-  // Agregar nuevo asistente
-  addAsistente(asistente: Asistente): void {
-    console.log(`➕ Agregando asistente: ${asistente.nombre}`)
-    
-    // Verificar que no existe
-    const existe = this.asistentes.find(a => a.id === asistente.id)
-    if (existe) {
-      console.warn(`⚠️ Ya existe asistente con ID: ${asistente.id}`)
-      return
+  // Agregar asistente
+  addAsistente(asistente: Asistente): Asistente {
+    const asistenteConMetadata: Asistente = {
+      ...asistente,
+      ultimaModificacion: new Date().toISOString(),
+      sincronizado: false,
+      dispositivoOrigen: 'local'
     }
-
-    this.asistentes.push(asistente)
-    this.registrarOperacion('crear', asistente.id, { asistente })
     
-    console.log(`✅ Asistente ${asistente.nombre} agregado. Total: ${this.asistentes.length}`)
+    this.asistentes.set(asistente.id, asistenteConMetadata)
+    this.pendingSyncQueue.add(asistente.id)
+    
+    console.log(`➕ Asistente agregado a memoria: ${asistente.nombre}`)
+    return asistenteConMetadata
   }
 
-  // Actualizar asistente existente
-  updateAsistente(id: string, updateData: Partial<Asistente>): Asistente | null {
-    const index = this.asistentes.findIndex(a => a.id === id)
-    
-    if (index === -1) {
-      console.error(`❌ No se encontró asistente con ID: ${id} para actualizar`)
+  // Actualizar asistente con manejo de conflictos
+  updateAsistente(id: string, datosActualizacion: Partial<Asistente>): Asistente | null {
+    const asistenteExistente = this.asistentes.get(id)
+    if (!asistenteExistente) {
+      console.error(`❌ Asistente ${id} no encontrado para actualizar`)
       return null
     }
 
-    const asistenteAnterior = { ...this.asistentes[index] }
-    this.asistentes[index] = {
-      ...this.asistentes[index],
-      ...updateData
+    const asistenteActualizado: Asistente = {
+      ...asistenteExistente,
+      ...datosActualizacion,
+      ultimaModificacion: new Date().toISOString(),
+      sincronizado: false,
+      dispositivoOrigen: 'local'
     }
 
-    this.registrarOperacion('actualizar', id, { 
-      anterior: asistenteAnterior, 
-      nuevo: this.asistentes[index] 
-    })
-
-    console.log(`✅ Asistente ${this.asistentes[index].nombre} actualizado`)
-    return this.asistentes[index]
+    this.asistentes.set(id, asistenteActualizado)
+    this.pendingSyncQueue.add(id)
+    
+    console.log(`✏️ Asistente actualizado en memoria: ${asistenteActualizado.nombre}`)
+    return asistenteActualizado
   }
 
   // Eliminar asistente
   deleteAsistente(id: string): boolean {
-    const index = this.asistentes.findIndex(a => a.id === id)
-    
-    if (index === -1) {
-      console.error(`❌ No se encontró asistente con ID: ${id} para eliminar`)
-      return false
+    const eliminado = this.asistentes.delete(id)
+    if (eliminado) {
+      this.pendingSyncQueue.delete(id)
+      console.log(`🗑️ Asistente eliminado de memoria: ${id}`)
     }
+    return eliminado
+  }
+
+  // Reemplazar todos los asistentes (para sincronización desde Google Sheets)
+  replaceAllAsistentes(asistentes: Asistente[], preservarCambiosLocales = true): void {
+    console.log(`🔄 Reemplazando ${this.asistentes.size} asistentes con ${asistentes.length} de Google Sheets`)
     
-    const asistenteEliminado = this.asistentes[index]
-    this.asistentes.splice(index, 1)
+    // Si hay cambios locales pendientes, preservarlos
+    const cambiosLocalesPendientes = new Map<string, Asistente>()
     
-    this.registrarOperacion('eliminar', id, { asistente: asistenteEliminado })
+    if (preservarCambiosLocales) {
+      this.pendingSyncQueue.forEach(id => {
+        const asistenteLocal = this.asistentes.get(id)
+        if (asistenteLocal && !asistenteLocal.sincronizado) {
+          cambiosLocalesPendientes.set(id, asistenteLocal)
+          console.log(`💾 Preservando cambio local pendiente: ${asistenteLocal.nombre}`)
+        }
+      })
+    }
+
+    // Limpiar y recargar
+    this.asistentes.clear()
     
-    console.log(`🗑️ Asistente ${asistenteEliminado.nombre} eliminado. Total: ${this.asistentes.length}`)
-    return true
+    // Agregar asistentes de Google Sheets
+    asistentes.forEach(asistente => {
+      const asistenteConMetadata: Asistente = {
+        ...asistente,
+        ultimaModificacion: asistente.ultimaModificacion || asistente.fechaRegistro,
+        sincronizado: true,
+        dispositivoOrigen: 'sheets'
+      }
+      this.asistentes.set(asistente.id, asistenteConMetadata)
+    })
+
+    // Restaurar cambios locales pendientes (tienen prioridad)
+    cambiosLocalesPendientes.forEach((asistenteLocal, id) => {
+      this.asistentes.set(id, asistenteLocal)
+      console.log(`🔄 Restaurado cambio local: ${asistenteLocal.nombre}`)
+    })
+
+    this.lastSyncTimestamp = new Date().toISOString()
+    console.log(`✅ Base de datos actualizada con ${this.asistentes.size} asistentes`)
+  }
+
+  // Marcar asistente como sincronizado
+  markAsSynced(id: string): void {
+    const asistente = this.asistentes.get(id)
+    if (asistente) {
+      asistente.sincronizado = true
+      this.asistentes.set(id, asistente)
+      this.pendingSyncQueue.delete(id)
+      console.log(`✅ Asistente marcado como sincronizado: ${asistente.nombre}`)
+    }
+  }
+
+  // Obtener asistentes pendientes de sincronización
+  getPendingSyncAsistentes(): Asistente[] {
+    return Array.from(this.pendingSyncQueue)
+      .map(id => this.asistentes.get(id))
+      .filter((asistente): asistente is Asistente => asistente !== undefined)
+  }
+
+  // Obtener estadísticas de sincronización
+  getSyncStats(): {
+    total: number
+    sincronizados: number
+    pendientes: number
+    lastSync: string | null
+  } {
+    const total = this.asistentes.size
+    const sincronizados = Array.from(this.asistentes.values())
+      .filter(a => a.sincronizado).length
+    
+    return {
+      total,
+      sincronizados,
+      pendientes: this.pendingSyncQueue.size,
+      lastSync: this.lastSyncTimestamp
+    }
+  }
+
+  // Limpiar cola de sincronización
+  clearSyncQueue(): void {
+    this.pendingSyncQueue.clear()
+    console.log('🧹 Cola de sincronización limpiada')
+  }
+
+  // Verificar si hay cambios locales pendientes
+  hasPendingChanges(): boolean {
+    return this.pendingSyncQueue.size > 0
+  }
+
+  // Método para debugging
+  debugInfo(): any {
+    return {
+      totalAsistentes: this.asistentes.size,
+      pendientesSync: this.pendingSyncQueue.size,
+      lastSync: this.lastSyncTimestamp,
+      asistentesIds: Array.from(this.asistentes.keys()),
+      pendientesIds: Array.from(this.pendingSyncQueue)
+    }
   }
 
   // Buscar asistentes
@@ -110,7 +201,7 @@ class MemoryDatabase {
     }
 
     const lowerQuery = query.toLowerCase().trim()
-    const resultados = this.asistentes.filter(a => 
+    const resultados = this.getAsistentes().filter(a => 
       a.nombre.toLowerCase().includes(lowerQuery) ||
       (a.email && a.email.toLowerCase().includes(lowerQuery)) ||
       (a.cargo && a.cargo.toLowerCase().includes(lowerQuery)) ||
@@ -123,7 +214,7 @@ class MemoryDatabase {
 
   // Marcar asistencia
   marcarAsistencia(id: string): Asistente | null {
-    const asistente = this.asistentes.find(a => a.id === id)
+    const asistente = this.asistentes.get(id)
     
     if (!asistente) {
       console.error(`❌ No se encontró asistente con ID: ${id}`)
@@ -148,7 +239,7 @@ class MemoryDatabase {
 
   // Marcar escarapela como impresa
   marcarEscarapelaImpresa(id: string): Asistente | null {
-    const asistente = this.asistentes.find(a => a.id === id)
+    const asistente = this.asistentes.get(id)
     
     if (!asistente) {
       console.error(`❌ No se encontró asistente con ID: ${id}`)
@@ -169,10 +260,10 @@ class MemoryDatabase {
 
   // Obtener estadísticas
   getEstadisticas() {
-    const total = this.asistentes.length
-    const presentes = this.asistentes.filter(a => a.presente).length
-    const escarapelasImpresas = this.asistentes.filter(a => a.escarapelaImpresa).length
-    const qrGenerados = this.asistentes.filter(a => a.qrGenerado).length
+    const total = this.asistentes.size
+    const presentes = Array.from(this.asistentes.values()).filter(a => a.presente).length
+    const escarapelasImpresas = Array.from(this.asistentes.values()).filter(a => a.escarapelaImpresa).length
+    const qrGenerados = Array.from(this.asistentes.values()).filter(a => a.qrGenerado).length
 
     const estadisticas = {
       total,
@@ -215,8 +306,8 @@ class MemoryDatabase {
 
   // Limpiar toda la base de datos
   limpiarTodo(): void {
-    const cantidad = this.asistentes.length
-    this.asistentes = []
+    const cantidad = this.asistentes.size
+    this.asistentes.clear()
     this.operacionesRecientes = []
     console.log(`🧹 Base de datos limpiada. ${cantidad} asistentes eliminados`)
   }
@@ -224,7 +315,7 @@ class MemoryDatabase {
   // Obtener información del estado de la base de datos
   getEstado() {
     return {
-      asistentes: this.asistentes.length,
+      asistentes: this.asistentes.size,
       operacionesRecientes: this.operacionesRecientes.length,
       ultimaOperacion: this.operacionesRecientes[0]?.timestamp || 'Ninguna',
       memoria: {
@@ -235,7 +326,7 @@ class MemoryDatabase {
   }
 }
 
-// Instancia única de la base de datos
+// Instancia singleton
 const db = new MemoryDatabase()
 
 // Función para inicializar con datos de prueba (opcional)

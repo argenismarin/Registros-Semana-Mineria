@@ -45,7 +45,7 @@ export async function PUT(
       )
     }
 
-    // Actualizar asistente en memoria local
+    // 1. ACTUALIZAR EN MEMORIA LOCAL PRIMERO
     const asistenteActualizado = db.updateAsistente(id, datosActualizacion)
     
     if (!asistenteActualizado) {
@@ -55,44 +55,68 @@ export async function PUT(
       )
     }
 
-    console.log('✅ Asistente actualizado en memoria:', asistenteActualizado.nombre)
+    console.log('✅ Asistente actualizado en memoria (pendiente sincronización):', asistenteActualizado.nombre)
 
-    // 🆕 SINCRONIZAR CON GOOGLE SHEETS
+    // 2. SINCRONIZAR CON GOOGLE SHEETS DE FORMA OPTIMIZADA (USANDO BATCH)
+    let syncSuccess = false
     if (googleSheetsService.isConfigured()) {
       try {
-        const syncSuccess = await googleSheetsService.updateAsistente(asistenteActualizado)
+        // Usar método optimizado con batching - se procesa automáticamente en lotes
+        syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, true)
         if (syncSuccess) {
-          console.log('📊 ✅ Cambios sincronizados exitosamente con Google Sheets:', asistenteActualizado.nombre)
+          // 3. Se agregó al lote exitosamente (se sincronizará realmente después)
+          console.log('📦 ✅ Cambios agregados al lote para sincronización:', asistenteActualizado.nombre)
         } else {
-          console.log('📊 ⚠️ Error sincronizando con Google Sheets - continuando')
+          console.log('📊 ⚠️ Error agregando al lote - intentando sincronización inmediata')
+          // Fallback: sincronización inmediata si el batch falla
+          syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, false)
+          if (syncSuccess) {
+            db.markAsSynced(id)
+            console.log('📊 ✅ Cambios sincronizados inmediatamente:', asistenteActualizado.nombre)
+          } else {
+            console.log('📊 ⚠️ Error sincronizando - cambio mantenido en memoria local')
+          }
         }
       } catch (error) {
         console.error('⚠️ Error sincronizando edición con Google Sheets:', error)
-        // No fallar la respuesta por esto, pero logearlo
+        syncSuccess = false
+        // NO fallar la respuesta - el cambio se mantiene en memoria local
       }
     } else {
       console.log('⚠️ Google Sheets no configurado, cambios solo en memoria local')
     }
 
-    // Notificar a través de Socket.io
+    // 4. NOTIFICAR A TRAVÉS DE SOCKET.IO
     try {
       await fetch(`${request.nextUrl.origin}/api/socket.io`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           event: 'asistente-actualizado',
-          data: asistenteActualizado
+          data: {
+            asistente: asistenteActualizado,
+            sincronizado: syncSuccess
+          }
         })
       })
     } catch (socketError) {
       console.error('Error notificando actualización:', socketError)
     }
 
-    return NextResponse.json({
+    // 5. RESPUESTA SIEMPRE EXITOSA SI SE GUARDÓ EN MEMORIA
+    const respuesta = {
       success: true,
       asistente: asistenteActualizado,
-      mensaje: 'Asistente actualizado correctamente'
-    })
+      mensaje: 'Asistente actualizado correctamente',
+      sincronizado: syncSuccess,
+      pendientesSync: db.hasPendingChanges() ? db.getPendingSyncAsistentes().length : 0
+    }
+
+    if (!syncSuccess && googleSheetsService.isConfigured()) {
+      respuesta.mensaje += ' (sincronización pendiente)'
+    }
+
+    return NextResponse.json(respuesta)
 
   } catch (error) {
     console.error('Error actualizando asistente:', error)

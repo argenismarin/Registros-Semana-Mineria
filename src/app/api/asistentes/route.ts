@@ -19,71 +19,71 @@ async function sincronizarConGoogleSheets(asistente: Asistente) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔄 GET /api/asistentes - Obteniendo lista de asistentes')
+    console.log('📊 GET /api/asistentes - Cargando asistentes...')
     
-    // Obtener asistentes de memoria local
-    const memoryAsistentes = db.getAsistentes()
+    // 1. VERIFICAR ESTADO ACTUAL DE LA MEMORIA
+    const stats = db.getSyncStats()
+    console.log('📊 Estadísticas actuales:', stats)
     
-    // Intentar cargar desde Google Sheets si está configurado
-    if (googleSheetsService.isConfigured()) {
+    // 2. SI LA MEMORIA ESTÁ VACÍA O HAY POCOS DATOS, CARGAR DESDE GOOGLE SHEETS
+    const shouldLoadFromSheets = stats.total === 0 || 
+      (googleSheetsService.isConfigured() && stats.total < 10) // Threshold arbitrario
+    
+    if (shouldLoadFromSheets && googleSheetsService.isConfigured()) {
       try {
-        console.log('📊 Cargando desde Google Sheets...')
-        
-        // Primero intentar obtener datos directamente de Google Sheets
+        console.log('🔄 Cargando datos desde Google Sheets...')
         const sheetsAsistentes = await googleSheetsService.getAsistentes()
         
         if (sheetsAsistentes && sheetsAsistentes.length > 0) {
-          console.log(`✅ ${sheetsAsistentes.length} asistentes encontrados en Google Sheets`)
-          
-          // Actualizar la base de datos local con los datos de Google Sheets
-          db.limpiarTodo()
-          sheetsAsistentes.forEach(asistente => {
-            db.addAsistente(asistente)
-          })
-          
-          return NextResponse.json(sheetsAsistentes)
+          // 3. USAR replaceAllAsistentes QUE PRESERVA CAMBIOS LOCALES
+          db.replaceAllAsistentes(sheetsAsistentes, true)
+          console.log(`✅ Cargados ${sheetsAsistentes.length} asistentes desde Google Sheets`)
         } else {
-          console.log('📝 Google Sheets está vacío')
-          
-          // Si hay datos en memoria, sincronizarlos con Google Sheets
-          if (memoryAsistentes.length > 0) {
-            console.log('🔄 Sincronizando datos de memoria con Google Sheets...')
-            const sincronizados = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
-            
-            if (sincronizados && sincronizados.length > 0) {
-              db.limpiarTodo()
-              sincronizados.forEach(asistente => {
-                db.addAsistente(asistente)
-              })
-              
-              console.log(`✅ ${sincronizados.length} asistentes sincronizados`)
-              return NextResponse.json(sincronizados)
-            }
-          }
+          console.log('⚠️ Google Sheets vacío o sin datos válidos')
         }
-        
-      } catch (sheetsError) {
-        console.error('❌ Error cargando desde Google Sheets:', sheetsError)
-        console.log('📝 Usando datos de memoria local como fallback')
+      } catch (error) {
+        console.error('⚠️ Error cargando desde Google Sheets:', error)
+        // Continuar con datos de memoria si Google Sheets falla
       }
     } else {
-      console.log('⚠️ Google Sheets no configurado, usando solo memoria local')
+      console.log(`📊 Usando datos de memoria: ${stats.total} asistentes (${stats.pendientes} pendientes)`)
     }
-    
-    // Fallback a memoria local
+
+    // 4. OBTENER DATOS FINALES DE MEMORIA (incluye preservados + nuevos)
     const asistentes = db.getAsistentes()
-    console.log(`📝 Retornando ${asistentes.length} asistentes de memoria local`)
-    
-    return NextResponse.json(asistentes)
+    console.log(`📋 Retornando ${asistentes.length} asistentes`)
+
+    // 5. INFORMACIÓN DE SINCRONIZACIÓN PARA EL CLIENTE
+    const respuesta = {
+      asistentes,
+      syncInfo: {
+        total: asistentes.length,
+        sincronizados: stats.sincronizados,
+        pendientes: stats.pendientes,
+        ultimaSync: stats.lastSync,
+        fuenteDatos: shouldLoadFromSheets ? 'google-sheets' : 'memoria-local'
+      }
+    }
+
+    return NextResponse.json(asistentes) // Solo asistentes para compatibilidad
     
   } catch (error) {
     console.error('❌ Error en GET /api/asistentes:', error)
-    return NextResponse.json(
-      { error: 'Error obteniendo asistentes' },
-      { status: 500 }
-    )
+    
+    // FALLBACK: devolver datos de memoria aunque haya errores
+    try {
+      const asistentes = db.getAsistentes()
+      console.log(`🔄 Fallback: retornando ${asistentes.length} asistentes de memoria`)
+      return NextResponse.json(asistentes)
+    } catch (fallbackError) {
+      console.error('❌ Error crítico en fallback:', fallbackError)
+      return NextResponse.json(
+        { error: 'Error cargando asistentes' },
+        { status: 500 }
+      )
+    }
   }
 }
 

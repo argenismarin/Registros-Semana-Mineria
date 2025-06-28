@@ -36,13 +36,22 @@ export default function Home() {
   
   // Estados para tiempo real
   const [clienteId, setClienteId] = useState('')
-  const [estadoSincronizacion, setEstadoSincronizacion] = useState<'sincronizado' | 'sincronizando' | 'error'>('sincronizado')
+  const [estadoSincronizacion, setEstadoSincronizacion] = useState<'sincronizado' | 'sincronizando' | 'error' | 'pendientes'>('sincronizado')
+  const [pendientesSincronizacion, setPendientesSincronizacion] = useState(0)
   const intervalRef = useRef<NodeJS.Timeout>()
   const isUpdatingRef = useRef(false)
 
-  // Configuración
-  const INTERVALO_POLLING = 30000 // 30 segundos para reducir carga
-  const TIMEOUT_OPERACION = 10000 // 10 segundos
+  // Estados para control de polling y sincronización
+  const [isPollingEnabled, setIsPollingEnabled] = useState(true)
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
+  const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null)
+
+  // Configuración de intervalos OPTIMIZADA (mucho menos agresiva)
+  const INTERVALO_POLLING_PRINCIPAL = 120000 // 2 minutos (antes 45 segundos)
+  const INTERVALO_VERIFICACION_PENDIENTES = 60000 // 1 minuto (antes 15 segundos) 
+  const DEBOUNCE_DELAY = 3000 // 3 segundos para agrupar cambios múltiples
+  const MAX_PENDIENTES_AUTO_SYNC = 5 // Auto-sync solo si hay pocos pendientes
+  const TIMEOUT_OPERACION = 30000 // 30 segundos timeout para operaciones
 
   // Generar clienteId solo en el cliente para evitar errores de hidratación
   useEffect(() => {
@@ -86,23 +95,113 @@ export default function Home() {
     })
   }
 
-  // Cargar asistentes simplificado
-  const cargarAsistentes = useCallback(async (forzarCarga = false) => {
-    if (isUpdatingRef.current && !forzarCarga) {
-      console.log('⏭️ Omitiendo carga, operación en progreso')
+  // Función auxiliar para ejecutar sincronización real
+  const ejecutarSincronizacionPendientes = useCallback(async (showLoading: boolean) => {
+    if (showLoading) {
+      setEstadoSincronizacion('sincronizando')
+    }
+
+    try {
+      const response = await fetch('/api/sincronizacion/pendientes', {
+        method: 'POST'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log(`✅ Sincronización optimizada: ${data.resultados?.exitosos || 0} exitosos (${data.resultados?.metodo || 'unknown'})`)
+        setPendientesSincronizacion(data.pendientesRestantes || 0)
+        
+        if (showLoading) {
+          setEstadoSincronizacion(data.pendientesRestantes > 0 ? 'pendientes' : 'sincronizado')
+        }
+
+        // Recargar asistentes solo si hubo cambios significativos
+        if (data.resultados?.exitosos > 0) {
+          // Recargar después de un delay para permitir que Google Sheets se actualice
+          setTimeout(() => {
+            cargarAsistentes(true)
+          }, 1000)
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}`)
+      }
+    } catch (error) {
+      console.error('Error sincronizando pendientes:', error)
+      if (showLoading) {
+        setEstadoSincronizacion('error')
+      }
+    }
+  }, []) // Sin dependencias para evitar referencias circulares
+
+  // Sincronizar pendientes con debouncing para múltiples cambios rápidos
+  const sincronizarPendientes = useCallback(async (showLoading = true) => {
+    // Limpiar timeout previo si existe
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout)
+    }
+
+    // Si no se requiere mostrar loading, aplicar debouncing
+    if (!showLoading) {
+      const timeout = setTimeout(async () => {
+        await ejecutarSincronizacionPendientes(showLoading)
+      }, DEBOUNCE_DELAY)
+      
+      setDebounceTimeout(timeout)
       return
     }
 
-    // No hacer nada si no tenemos clienteId aún
-    if (!clienteId) {
-      console.log('⏭️ Esperando clienteId...')
+    // Ejecutar inmediatamente si se requiere mostrar loading
+    await ejecutarSincronizacionPendientes(showLoading)
+  }, [debounceTimeout, ejecutarSincronizacionPendientes])
+
+  // Verificar pendientes con debouncing y límites
+  const verificarPendientes = useCallback(async () => {
+    // Solo verificar si no hay operaciones críticas en curso
+    if (estadoSincronizacion === 'sincronizando' || estadoGoogleSheets === 'sincronizando') {
       return
     }
 
     try {
-      setEstadoSincronizacion('sincronizando')
-      
-      console.log('🔄 Cargando asistentes...')
+      const response = await fetch('/api/sincronizacion/pendientes')
+      if (response.ok) {
+        const data = await response.json()
+        const pendientes = data.pendientes || 0
+        setPendientesSincronizacion(pendientes)
+
+        // Auto-sincronizar solo si hay pocos pendientes (para evitar sobrecarga)
+        if (pendientes > 0 && pendientes <= MAX_PENDIENTES_AUTO_SYNC) {
+          console.log(`🔄 Auto-sincronizando ${pendientes} cambios pendientes...`)
+          await sincronizarPendientes(false) // false = no forzar UI loading
+        }
+      }
+    } catch (error) {
+      console.error('Error verificando pendientes:', error)
+    }
+  }, [estadoSincronizacion, estadoGoogleSheets, sincronizarPendientes])
+
+  // Cargar asistentes con control de frecuencia
+  const cargarAsistentes = useCallback(async (forceReload = false) => {
+    // No hacer polling si hay operaciones en curso o si se hizo muy recientemente
+    if (!forceReload) {
+      if (estadoSincronizacion === 'sincronizando' || 
+          estadoGoogleSheets === 'sincronizando' ||
+          pendientesSincronizacion > MAX_PENDIENTES_AUTO_SYNC) {
+        console.log('⏭️ Saltando polling: operación en curso o muchos pendientes')
+        return
+      }
+
+      // Verificar si se hizo sync muy recientemente (menos de 30 segundos)
+      if (lastSyncTime && (Date.now() - lastSyncTime.getTime()) < 30000) {
+        console.log('⏭️ Saltando polling: sync muy reciente')
+        return
+      }
+    }
+
+    if (isUpdatingRef.current) return
+    
+    isUpdatingRef.current = true
+    try {
+      console.log(`🔄 Cargando asistentes... (forzado: ${forceReload})`)
       const response = await fetch('/api/asistentes', {
         headers: {
           'Cache-Control': 'no-cache',
@@ -118,7 +217,10 @@ export default function Home() {
       console.log(`✅ ${data.length} asistentes cargados`)
       
       setAsistentes(data)
-      setEstadoSincronizacion('sincronizado')
+      setLastSyncTime(new Date())
+      
+      // Verificar pendientes después de cargar
+      setTimeout(verificarPendientes, 500)
       
     } catch (error) {
       console.error('❌ Error cargando asistentes:', error)
@@ -128,9 +230,10 @@ export default function Home() {
         toast.error('Error cargando datos. Reintentando...')
       }
     } finally {
+      isUpdatingRef.current = false
       setLoading(false)
     }
-  }, [clienteId, loading])
+  }, [clienteId, loading, verificarPendientes, lastSyncTime, estadoSincronizacion, estadoGoogleSheets, pendientesSincronizacion])
 
   // Verificar estado de Google Sheets
   const verificarEstadoGoogleSheets = useCallback(async () => {
@@ -179,7 +282,65 @@ export default function Home() {
     }
   }
 
-  // Configurar polling para tiempo real
+  // Ejecutar diagnóstico completo del sistema
+  const ejecutarDiagnostico = async () => {
+    try {
+      const response = await fetch('/api/diagnostico')
+      const diagnostico = await response.json()
+      
+      if (diagnostico.resumen.estado === 'FUNCIONAL') {
+        toast.success(`🔍 Diagnóstico: Sistema funcionando correctamente. 
+          💾 Memoria: ${diagnostico.diagnostico.memoriaLocal.asistentesEnMemoria} asistentes
+          📊 Google Sheets: ${diagnostico.diagnostico.googleSheets.asistentesEnSheets} asistentes`)
+      } else {
+        toast.warning(`⚠️ Diagnóstico detectó problemas:
+          ${diagnostico.resumen.recomendaciones.join(', ')}`)
+      }
+      
+      // Mostrar detalles en consola
+      console.log('🔍 Diagnóstico completo:', diagnostico)
+      
+    } catch (error) {
+      console.error('Error ejecutando diagnóstico:', error)
+      toast.error(`Error en diagnóstico: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
+  // Forzar sincronización completa (memoria -> Google Sheets)
+  const forzarSincronizacionCompleta = async () => {
+    if (estadoGoogleSheets === 'sincronizando') return
+
+    try {
+      setEstadoGoogleSheets('sincronizando')
+      toast.info('🔄 Iniciando sincronización forzada...')
+      
+      const response = await fetch('/api/diagnostico', {
+        method: 'POST'
+      })
+      
+      const resultado = await response.json()
+      
+      if (resultado.success) {
+        setEstadoGoogleSheets('configurado')
+        setUltimaSincronizacion(new Date().toISOString())
+        
+        toast.success(`✅ Sincronización forzada completada:
+          ✅ ${resultado.resultados.exitosos} asistentes sincronizados
+          ${resultado.resultados.fallidos > 0 ? `❌ ${resultado.resultados.fallidos} fallidos` : ''}`)
+        
+        // Recargar asistentes
+        cargarAsistentes(true)
+      } else {
+        throw new Error(resultado.error || 'Error en sincronización forzada')
+      }
+    } catch (error) {
+      console.error('Error en sincronización forzada:', error)
+      setEstadoGoogleSheets('error')
+      toast.error(`Error en sincronización forzada: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
+  // Configurar polling inteligente
   useEffect(() => {
     // Solo cargar asistentes si ya tenemos clienteId
     if (!clienteId) return
@@ -190,18 +351,27 @@ export default function Home() {
     // Verificar estado de Google Sheets
     verificarEstadoGoogleSheets()
 
-    // Configurar polling
+    // Configurar polling principal (menos frecuente)
     intervalRef.current = setInterval(() => {
-      cargarAsistentes()
-    }, INTERVALO_POLLING)
+      // Solo hacer polling si no hay operaciones en curso y no hay pendientes
+      if (!isUpdatingRef.current && pendientesSincronizacion === 0) {
+        cargarAsistentes()
+      }
+    }, INTERVALO_POLLING_PRINCIPAL)
 
-    // Limpiar intervalo al desmontar
+    // Configurar verificación de pendientes (más frecuente)
+    const pendientesInterval = setInterval(() => {
+      verificarPendientes()
+    }, INTERVALO_VERIFICACION_PENDIENTES)
+
+    // Limpiar intervalos al desmontar
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
+      clearInterval(pendientesInterval)
     }
-  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets]) // Agregar clienteId como dependencia
+  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets, verificarPendientes, pendientesSincronizacion])
 
   const marcarAsistencia = async (id: string) => {
     if (isUpdatingRef.current) {
@@ -497,6 +667,67 @@ export default function Home() {
     pendientes: asistentes.filter(a => !a.presente).length
   }
 
+  // Generar IDs faltantes para registros en Google Sheets
+  const generarIdsFaltantes = async () => {
+    try {
+      setEstadoGoogleSheets('sincronizando')
+      toast.info('🔧 Generando IDs faltantes...')
+      
+      // Primero obtener análisis de registros sin ID
+      const analisisResponse = await fetch('/api/asistentes/generar-ids')
+      const analisis = await analisisResponse.json()
+      
+      if (analisis.sinId === 0) {
+        toast.success('✅ Todos los registros ya tienen IDs válidos')
+        setEstadoGoogleSheets('configurado')
+        return
+      }
+      
+      console.log(`🔍 Análisis: ${analisis.sinId} registros sin ID de ${analisis.total} total`)
+      
+      // Confirmar generación
+      const confirmar = window.confirm(
+        `Se encontraron ${analisis.sinId} registros sin ID de ${analisis.total} total.\n\n` +
+        `¿Generar IDs únicos para estos registros?\n\n` +
+        `Esto actualizará Google Sheets y recargará los datos.`
+      )
+      
+      if (!confirmar) {
+        setEstadoGoogleSheets('configurado')
+        return
+      }
+      
+      // Generar IDs
+      const response = await fetch('/api/asistentes/generar-ids', {
+        method: 'POST'
+      })
+      
+      const resultado = await response.json()
+      
+      if (resultado.success) {
+        setEstadoGoogleSheets('configurado')
+        
+        toast.success(`✅ IDs generados exitosamente:
+          🆕 ${resultado.resultados.generados} IDs generados
+          ✅ ${resultado.resultados.conId} ya tenían ID
+          📊 ${resultado.resultados.total} total procesados`)
+        
+        // Recargar datos
+        setTimeout(() => {
+          cargarAsistentes(true)
+        }, 2000)
+        
+      } else {
+        throw new Error(resultado.error || 'Error generando IDs')
+      }
+      
+    } catch (error) {
+      console.error('Error generando IDs:', error)
+      setEstadoGoogleSheets('error')
+      toast.error(`Error generando IDs: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
@@ -528,6 +759,49 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Controles de sincronización - Nueva sección */}
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={ejecutarDiagnostico}
+              className="inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full sm:w-auto"
+              title="Ejecutar diagnóstico completo del sistema"
+            >
+              🔍 Diagnóstico
+            </button>
+            <button
+              onClick={generarIdsFaltantes}
+              className="inline-flex items-center justify-center px-3 py-2 border border-orange-300 text-sm font-medium rounded-md text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 w-full sm:w-auto"
+              title="Generar IDs únicos para registros que no tengan ID"
+              disabled={estadoGoogleSheets === 'sincronizando'}
+            >
+              {estadoGoogleSheets === 'sincronizando' ? '🔄 Procesando...' : '🔧 Generar IDs'}
+            </button>
+            <button
+              onClick={sincronizarGoogleSheets}
+              className="inline-flex items-center justify-center px-3 py-2 border border-blue-300 text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 w-full sm:w-auto"
+              disabled={estadoGoogleSheets === 'sincronizando'}
+            >
+              {estadoGoogleSheets === 'sincronizando' ? '🔄 Sincronizando...' : '🔄 Sincronizar Sheets'}
+            </button>
+            {pendientesSincronizacion > 0 && (
+              <button
+                onClick={() => sincronizarPendientes(true)}
+                className="inline-flex items-center justify-center px-3 py-2 border border-yellow-300 text-sm font-medium rounded-md text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 w-full sm:w-auto"
+                title={`Sincronizar ${pendientesSincronizacion} cambios pendientes`}
+              >
+                ⏳ Sync Pendientes ({pendientesSincronizacion})
+              </button>
+            )}
+            <button
+              onClick={forzarSincronizacionCompleta}
+              disabled={estadoGoogleSheets === 'sincronizando' || estadoGoogleSheets === 'no-configurado'}
+              className="inline-flex items-center justify-center px-3 py-2 border border-orange-300 text-sm font-medium rounded-md text-orange-700 bg-orange-50 hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+              title="Forzar sincronización completa: memoria → Google Sheets"
+            >
+              ⚡ Forzar Sync
+            </button>
+          </div>
+
           {/* Indicadores de estado - Optimizado para móviles */}
           <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 text-sm">
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
@@ -536,12 +810,20 @@ export default function Home() {
                 ? 'bg-green-100 text-green-700' 
                 : estadoSincronizacion === 'sincronizando'
                 ? 'bg-blue-100 text-blue-700'
+                : estadoSincronizacion === 'pendientes'
+                ? 'bg-yellow-100 text-yellow-700'
                 : 'bg-red-100 text-red-700'
             }`}>
               {estadoSincronizacion === 'sincronizado' && '✅'}
               {estadoSincronizacion === 'sincronizando' && '🔄'}
+              {estadoSincronizacion === 'pendientes' && '⏳'}
               {estadoSincronizacion === 'error' && '❌'}
-              <span className="capitalize">{estadoSincronizacion}</span>
+              <span className="capitalize">
+                {estadoSincronizacion === 'sincronizado' && 'Sincronizado'}
+                {estadoSincronizacion === 'sincronizando' && 'Sincronizando'}
+                {estadoSincronizacion === 'pendientes' && `${pendientesSincronizacion} Pendientes`}
+                {estadoSincronizacion === 'error' && 'Error'}
+              </span>
             </div>
             
               <div className={`flex items-center gap-2 px-3 py-2 rounded-full ${
