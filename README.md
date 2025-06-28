@@ -1,186 +1,161 @@
-# 🎯 Sistema de Registro de Eventos
+# Sistema de Registro de Eventos - Semana de la Minería
 
-Sistema completo para gestión de eventos con registro de asistentes, generación de QR codes, y sincronización con Google Sheets en tiempo real.
+Sistema completo de registro de asistentes para eventos, con generación de códigos QR, impresión de escarapelas y sincronización en tiempo real con Google Sheets.
 
-## 🚀 Deployment en Vercel (CONFIGURADO ✅)
+## 🚀 Funcionalidades Principales
 
-### **¡Todo está listo para Vercel!** Solo sigue estos pasos:
+### ✅ Gestión de Asistentes
+- Registro de asistentes con información completa
+- Importación masiva desde archivos CSV/Excel
+- Edición y actualización de datos
+- Marcado de asistencia mediante QR
 
-### **1. Subir a GitHub**
-```bash
-# Inicializar repositorio (si no lo has hecho)
-git init
-git add .
-git commit -m "Sistema de registro de eventos listo para Vercel"
+### 📱 Códigos QR
+- Generación automática de códigos QR únicos
+- Escaner QR integrado para marcar asistencia
+- Generación masiva de códigos QR
+- Sistema de validación en tiempo real
 
-# Conectar a GitHub
-git branch -M main
-git remote add origin https://github.com/tu-usuario/tu-repo.git
-git push -u origin main
-```
+### 🎫 Escarapelas
+- Diseño personalizado de escarapelas (98mm × 128mm)
+- Generación de PDF optimizado para impresión
+- Formato específico: solo nombre y cargo
+- Posicionamiento preciso del texto
 
-### **2. Conectar con Vercel**
-1. Ve a [vercel.com](https://vercel.com)
-2. Conecta tu cuenta de GitHub
-3. Selecciona tu repositorio
-4. Vercel detectará automáticamente que es un proyecto Next.js
-5. Haz clic en **"Deploy"**
+### 📊 Sincronización y Reportes
+- Integración completa con Google Sheets
+- Sincronización automática en tiempo real
+- Reportes en PDF
+- Diagnósticos del sistema
 
-### **3. Configurar Variables de Entorno en Vercel**
-En el dashboard de Vercel:
-1. Ve a **Settings → Environment Variables**
-2. Agrega estas variables (copia desde `env.vercel.example`):
+### ⚡ Tiempo Real
+- Actualizaciones instantáneas con Socket.io
+- Estado de asistencia en vivo
+- Notificaciones automáticas
 
-```
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
-[TU_CLAVE_PRIVADA_COMPLETA]
------END PRIVATE KEY-----"
+## 🛠 Tecnologías Utilizadas
 
-GOOGLE_SERVICE_EMAIL=registro-eventos-service@registro-cobre.iam.gserviceaccount.com
+- **Frontend**: Next.js 14, React 18, TypeScript
+- **Styling**: Tailwind CSS
+- **Backend**: API Routes de Next.js
+- **Base de Datos**: Sistema en memoria con sincronización
+- **PDF**: jsPDF para generación de documentos
+- **QR**: qrcode para generación, jsQR para escáner
+- **Tiempo Real**: Socket.io
+- **Integración**: Google Sheets API
 
-GOOGLE_SPREADSHEET_ID=1ua609LyVhuIX3vVfiNSYEg4-Wcwnvd1nkzGKZGTWx40
-```
+## 📦 Instalación
 
-### **4. ¡Listo! 🎉**
-- Tu sitio estará disponible en: `https://tu-proyecto.vercel.app`
-- Cada push a `main` actualiza automáticamente
-- SSL incluido gratis
-- CDN global automático
+1. **Clonar el repositorio**
+   ```bash
+   git clone https://github.com/argenismarin/Registros-Semana-Mineria.git
+   cd Registros-Semana-Mineria
+   ```
 
----
+2. **Instalar dependencias**
+   ```bash
+   npm install
+   ```
 
-## ✨ Características
+3. **Configurar variables de entorno**
+   ```bash
+   cp env.vercel.example .env.local
+   ```
+   
+   Configurar las variables necesarias:
+   - `GOOGLE_SHEETS_PRIVATE_KEY`
+   - `GOOGLE_SHEETS_CLIENT_EMAIL`
+   - `GOOGLE_SPREADSHEET_ID`
 
-- ✅ **Registro de asistentes** con formulario completo
-- ✅ **Generación de QR codes** individuales y masivos
-- ✅ **Escaner QR** para marcar asistencia
-- ✅ **Sincronización con Google Sheets** en tiempo real
-- ✅ **Reportes y estadísticas** en tiempo real
-- ✅ **Interfaz responsive** y moderna
-- ✅ **Optimizado para Vercel** (deployment automático)
+4. **Ejecutar en desarrollo**
+   ```bash
+   npm run dev
+   ```
 
-## 🛠️ Tecnologías
+## 🔧 Configuración de Google Sheets
 
-- **Next.js 14** - Framework React con App Router
-- **TypeScript** - Tipado estático
-- **Tailwind CSS** - Estilos utilitarios
-- **Socket.io** - Comunicación en tiempo real
-- **Google Sheets API** - Persistencia de datos
-- **QR Code Generator** - Generación de códigos QR
-- **jsQR** - Scanner de códigos QR
-
-## 📁 Estructura del Proyecto
-
-```
-src/
-├── app/                    # App Router de Next.js
-│   ├── api/               # API Routes
-│   │   ├── asistentes/    # CRUD asistentes
-│   │   ├── qr/           # Generación/scan QR
-│   │   ├── socket.io/    # WebSocket server
-│   │   └── ...
-│   ├── configuracion/     # Configuración del evento
-│   ├── importar/         # Importar desde Google Sheets
-│   ├── qr-masivo/        # Generación masiva de QR
-│   ├── reportes/         # Reportes y estadísticas
-│   └── page.tsx          # Página principal
-├── components/            # Componentes reutilizables
-├── lib/                  # Utilidades y configuración
-└── types/                # Definiciones de tipos
-```
-
-## 🔧 Desarrollo Local
-
-```bash
-# Instalar dependencias
-npm install
-
-# Configurar variables de entorno
-cp env.vercel.example .env.local
-# Editar .env.local con tus credenciales
-
-# Ejecutar en desarrollo
-npm run dev
-```
-
-## 📊 Google Sheets Setup
-
-1. **Crear Service Account** en Google Cloud Console
-2. **Generar credenciales JSON**
-3. **Compartir hoja de cálculo** con el email del service account
-4. **Configurar variables** en Vercel
+1. Crear un proyecto en Google Cloud Console
+2. Habilitar Google Sheets API
+3. Crear credenciales de cuenta de servicio
+4. Compartir la hoja de cálculo con el email de la cuenta de servicio
+5. Configurar las variables de entorno
 
 Ver `GOOGLE_SHEETS_SETUP.md` para instrucciones detalladas.
 
-## 🔄 Funcionalidades en Tiempo Real
+## 📝 Estructura del Proyecto
 
-- **Socket.io** integrado con Vercel
-- **Actualizaciones automáticas** cuando se marca asistencia
-- **Sincronización** con Google Sheets
-- **Estadísticas en vivo**
-
-## 📱 Características Móviles
-
-- **Scanner QR nativo** en dispositivos móviles
-- **Interfaz responsive** para tablets y smartphones
-- **PWA ready** para instalación como app
-
-## 🚀 Ventajas de Vercel
-
-- ✅ **Deployment automático** con cada push
-- ✅ **SSL gratis** y automático
-- ✅ **CDN global** para máximo rendimiento
-- ✅ **Scaling automático** según demanda
-- ✅ **Zero config** - funciona sin configuración adicional
-- ✅ **Preview deployments** para cada PR
-
-## 📋 Comandos Útiles
-
-```bash
-# Desarrollo
-npm run dev          # Servidor de desarrollo
-npm run build        # Build para producción
-npm run start        # Servidor de producción
-npm run lint         # Linting del código
-
-# Deployment
-git push origin main # Auto-deploy en Vercel
+```
+src/
+├── app/
+│   ├── api/           # API Routes
+│   ├── components/    # Componentes React
+│   └── pages/         # Páginas de la aplicación
+├── lib/
+│   ├── database.ts    # Gestión de datos
+│   └── googleSheets.ts # Integración Google Sheets
+└── types/             # Tipos TypeScript
 ```
 
-## 🔐 Seguridad
+## 🎯 Páginas Principales
 
-- Variables de entorno protegidas en Vercel
+- `/` - Dashboard principal
+- `/importar` - Importación de asistentes
+- `/escarapelas` - Generación de escarapelas
+- `/qr-masivo` - Generación masiva de QR
+- `/test-qr-scanner` - Escáner de códigos QR
+- `/reportes` - Reportes y estadísticas
+- `/configuracion` - Configuración del sistema
+
+## 📄 Funcionalidades Especiales
+
+### Escarapelas Personalizadas
+- Formato: 98mm × 128mm
+- Posición del texto: x=26mm, y=53mm
+- Fuentes: Nombre 20pt, Cargo 15pt
+- Una escarapela por página para impresión directa
+
+### Sistema QR
+- Códigos únicos por asistente
+- Validación en tiempo real
+- Prevención de marcados duplicados
+- Historial de asistencia
+
+## 🚀 Despliegue
+
+El proyecto está configurado para despliegue en:
+- **Vercel** (recomendado)
+- **Hostinger** con PM2
+- **Servidor propio** con Nginx
+
+Ver archivos de configuración:
+- `vercel.json`
+- `ecosystem.config.js`
+- `nginx.conf.example`
+
+## 📋 Scripts Disponibles
+
+```bash
+npm run dev          # Desarrollo
+npm run build        # Construcción para producción
+npm run start        # Servidor de producción
+npm run test         # Ejecutar pruebas
+```
+
+## 🔒 Seguridad
+
+- Variables de entorno para datos sensibles
 - Validación de datos en servidor
-- CORS configurado para Socket.io
-- Rate limiting automático
-
-## 🐛 Troubleshooting
-
-### **Error de Google Sheets**
-- Verificar que las credenciales estén correctas
-- Confirmar que la hoja esté compartida con el service account
-
-### **Socket.io no funciona**
-- Vercel maneja WebSockets automáticamente
-- Las configuraciones están pre-hechas
-
-### **Build errors**
-- Verificar que todas las dependencias estén instaladas
-- Revisar errores de TypeScript
+- Sanitización de entradas
+- Manejo seguro de archivos
 
 ## 📞 Soporte
 
-Si encuentras problemas:
-1. Revisar los logs en Vercel Dashboard
-2. Verificar variables de entorno
-3. Comprobar configuración de Google Sheets
+Para problemas o consultas sobre el sistema, revisar:
+- `STATUS.md` - Estado actual del proyecto
+- `FUNCIONALIDADES.md` - Documentación detallada
+- Issues del repositorio
 
 ---
 
-**🎉 ¡Tu sistema está listo para producción en Vercel!**
-
-Solo necesitas:
-1. Subir a GitHub
-2. Conectar con Vercel
-3. Configurar variables de entorno
-4. ¡Disfrutar tu aplicación en línea! 
+**Desarrollado para la Semana de la Minería**  
+Sistema completo de gestión de eventos con tecnología moderna. 
