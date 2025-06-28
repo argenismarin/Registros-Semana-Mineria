@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   try {
     const { asistentes, opciones }: { 
       asistentes: Asistente[]
-      opciones?: EscarapelaOptions
+      opciones?: EscarapelaOptions 
     } = await request.json()
 
     if (!asistentes || asistentes.length === 0) {
@@ -164,24 +164,24 @@ async function generarPDFIndividual(asistentes: Asistente[]) {
 
 // Función para generar PDF en modo matriz (múltiples escarapelas en A4)
 async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOptions) {
-  // Configuración de la matriz 11x3 sin márgenes
-  const FILAS = 11
-  const COLUMNAS = 3
-  const TOTAL_POSICIONES = FILAS * COLUMNAS // 33 posiciones
+    // Configuración de la matriz 11x3 sin márgenes
+    const FILAS = 11
+    const COLUMNAS = 3
+    const TOTAL_POSICIONES = FILAS * COLUMNAS // 33 posiciones
 
-  // Dimensiones de página A4 en mm
-  const pageWidth = 210
-  const pageHeight = 297
+    // Dimensiones de página A4 en mm
+    const pageWidth = 210
+    const pageHeight = 297
 
-  // Dimensiones de cada escarapela (sin márgenes)
-  const escarapelaWidth = pageWidth / COLUMNAS // 70mm
-  const escarapelaHeight = pageHeight / FILAS // 27mm
+    // Dimensiones de cada escarapela (sin márgenes)
+    const escarapelaWidth = pageWidth / COLUMNAS // 70mm
+    const escarapelaHeight = pageHeight / FILAS // 27mm
 
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  })
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
 
   // Limpiar metadatos para evitar información automática
   doc.setProperties({
@@ -192,25 +192,25 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     creator: ''
   })
 
-  
-  // Función para dibujar una escarapela
-  const dibujarEscarapela = (asistente: Asistente, x: number, y: number) => {
+
+    // Función para dibujar una escarapela
+    const dibujarEscarapela = (asistente: Asistente, x: number, y: number) => {
     // Área completa disponible con padding mínimo
     const padding = 0.5
-    const innerX = x + padding
-    const innerY = y + padding
-    const innerWidth = escarapelaWidth - (padding * 2)
-    const innerHeight = escarapelaHeight - (padding * 2)
+      const innerX = x + padding
+      const innerY = y + padding
+      const innerWidth = escarapelaWidth - (padding * 2)
+      const innerHeight = escarapelaHeight - (padding * 2)
 
     // Calcular el centro horizontal del área
     const centroHorizontal = x + (escarapelaWidth / 2)
 
     // NOMBRE DEL ASISTENTE - TAMAÑO FIJO
-    doc.setFont('helvetica', 'bold')
-    
+      doc.setFont('helvetica', 'bold')
+      
     // Tamaño fijo para nombres en modo matriz
     const nombreFontSize = 16  // Tamaño fijo apropiado para matriz
-    const nombreCompleto = asistente.nombre
+      const nombreCompleto = asistente.nombre
     
     doc.setFontSize(nombreFontSize)
     
@@ -227,7 +227,7 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     let cargoLineas = []
     
     if (asistente.cargo && asistente.cargo.trim() !== '') {
-      doc.setFont('helvetica', 'normal')
+        doc.setFont('helvetica', 'normal')
       doc.setFontSize(cargoFontSize)
       
       cargoLineas = doc.splitTextToSize(asistente.cargo, innerWidth - 1)
@@ -250,7 +250,7 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
     for (let i = 0; i < numeroLineasNombre; i++) {
       doc.text(nombreLineas[i], centroHorizontal, currentY, { align: 'center' })
       currentY += nombreFontSize * 0.352778 * 0.9
-    }
+      }
 
     // CARGO (si existe) - CENTRADO HORIZONTALMENTE (todas las líneas)
     if (asistente.cargo && asistente.cargo.trim() !== '' && cargoLineas.length > 0) {
@@ -263,53 +263,53 @@ async function generarPDFMatriz(asistentes: Asistente[], opciones?: EscarapelaOp
       for (let i = 0; i < cargoLineas.length; i++) {
         doc.text(cargoLineas[i], centroHorizontal, currentY, { align: 'center' })
         currentY += cargoFontSize * 0.352778 * 0.9  // Espaciado entre líneas
+        }
       }
     }
-  }
 
-  // Función para obtener coordenadas de una posición en la matriz
-  const obtenerCoordenadas = (posicion: number) => {
-    const fila = Math.floor(posicion / COLUMNAS)
-    const columna = posicion % COLUMNAS
-    
-    return {
-      x: columna * escarapelaWidth,
-      y: fila * escarapelaHeight
-    }
-  }
-
-  // Si no se especifican posiciones, llenar de forma secuencial
-  const posicionesUsar = opciones?.posicionesSeleccionadas || 
-    Array.from({ length: Math.min(asistentes.length, TOTAL_POSICIONES) }, (_, i) => i)
-
-  // Generar escarapelas en las posiciones especificadas
-  let asistenteIndex = 0
-  let paginaActual = 0
-
-  for (const posicion of posicionesUsar) {
-    if (asistenteIndex >= asistentes.length) break
-
-    // Si la posición es mayor que las disponibles en una página, crear nueva página
-    const paginaPosicion = Math.floor(posicion / TOTAL_POSICIONES)
-    if (paginaPosicion > paginaActual) {
-      doc.addPage()
-      paginaActual = paginaPosicion
+    // Función para obtener coordenadas de una posición en la matriz
+    const obtenerCoordenadas = (posicion: number) => {
+      const fila = Math.floor(posicion / COLUMNAS)
+      const columna = posicion % COLUMNAS
+      
+      return {
+        x: columna * escarapelaWidth,
+        y: fila * escarapelaHeight
+      }
     }
 
-    const posicionEnPagina = posicion % TOTAL_POSICIONES
-    const { x, y } = obtenerCoordenadas(posicionEnPagina)
-    
-    dibujarEscarapela(asistentes[asistenteIndex], x, y)
-    asistenteIndex++
-  }
+    // Si no se especifican posiciones, llenar de forma secuencial
+    const posicionesUsar = opciones?.posicionesSeleccionadas || 
+      Array.from({ length: Math.min(asistentes.length, TOTAL_POSICIONES) }, (_, i) => i)
 
-  const pdfBuffer = doc.output('arraybuffer')
+    // Generar escarapelas en las posiciones especificadas
+    let asistenteIndex = 0
+    let paginaActual = 0
 
-  return new NextResponse(pdfBuffer, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
+    for (const posicion of posicionesUsar) {
+      if (asistenteIndex >= asistentes.length) break
+
+      // Si la posición es mayor que las disponibles en una página, crear nueva página
+      const paginaPosicion = Math.floor(posicion / TOTAL_POSICIONES)
+      if (paginaPosicion > paginaActual) {
+        doc.addPage()
+        paginaActual = paginaPosicion
+      }
+
+      const posicionEnPagina = posicion % TOTAL_POSICIONES
+      const { x, y } = obtenerCoordenadas(posicionEnPagina)
+      
+      dibujarEscarapela(asistentes[asistenteIndex], x, y)
+      asistenteIndex++
+    }
+
+    const pdfBuffer = doc.output('arraybuffer')
+
+    return new NextResponse(pdfBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="escarapelas-matriz-${new Date().toISOString().split('T')[0]}.pdf"`
-    }
-  })
+      }
+    })
 } 

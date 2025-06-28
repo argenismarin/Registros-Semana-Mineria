@@ -40,7 +40,7 @@ export default function EditarAsistente({
     escarapelaImpresa: asistente.escarapelaImpresa,
     qrGenerado: asistente.qrGenerado || false
   })
-
+  
   // Opciones de cargo predefinidas
   const opcionesCargo = [
     'Asistente',

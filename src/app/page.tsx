@@ -51,16 +51,16 @@ export default function Home() {
 
   const asistentesFiltrados = asistentes
     .filter(asistente => {
-      const coincideFiltro = !filtro || 
-        asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
-        (asistente.email && asistente.email.toLowerCase().includes(filtro.toLowerCase())) ||
-        (asistente.cargo && asistente.cargo.toLowerCase().includes(filtro.toLowerCase())) ||
-        (asistente.empresa && asistente.empresa.toLowerCase().includes(filtro.toLowerCase()))
-      
-      const coincidePendiente = !mostrarSoloPendientes || !asistente.presente
-      
-      return coincideFiltro && coincidePendiente
-    })
+    const coincideFiltro = !filtro || 
+      asistente.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
+      (asistente.email && asistente.email.toLowerCase().includes(filtro.toLowerCase())) ||
+      (asistente.cargo && asistente.cargo.toLowerCase().includes(filtro.toLowerCase())) ||
+      (asistente.empresa && asistente.empresa.toLowerCase().includes(filtro.toLowerCase()))
+    
+    const coincidePendiente = !mostrarSoloPendientes || !asistente.presente
+    
+    return coincideFiltro && coincidePendiente
+  })
     .sort((a, b) => {
       // Ordenar alfabéticamente por nombre (ignorando mayúsculas/minúsculas)
       return a.nombre.toLowerCase().localeCompare(b.nombre.toLowerCase(), 'es', {
@@ -532,37 +532,37 @@ export default function Home() {
           <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 text-sm">
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
               <div className={`flex items-center gap-2 px-3 py-2 rounded-full ${
-                estadoSincronizacion === 'sincronizado' 
-                  ? 'bg-green-100 text-green-700' 
-                  : estadoSincronizacion === 'sincronizando'
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-red-100 text-red-700'
-              }`}>
-                {estadoSincronizacion === 'sincronizado' && '✅'}
-                {estadoSincronizacion === 'sincronizando' && '🔄'}
-                {estadoSincronizacion === 'error' && '❌'}
-                <span className="capitalize">{estadoSincronizacion}</span>
-              </div>
-              
+              estadoSincronizacion === 'sincronizado' 
+                ? 'bg-green-100 text-green-700' 
+                : estadoSincronizacion === 'sincronizando'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {estadoSincronizacion === 'sincronizado' && '✅'}
+              {estadoSincronizacion === 'sincronizando' && '🔄'}
+              {estadoSincronizacion === 'error' && '❌'}
+              <span className="capitalize">{estadoSincronizacion}</span>
+            </div>
+            
               <div className={`flex items-center gap-2 px-3 py-2 rounded-full ${
-                estadoGoogleSheets === 'configurado' 
-                  ? 'bg-purple-100 text-purple-700' 
-                  : estadoGoogleSheets === 'sincronizando'
-                  ? 'bg-blue-100 text-blue-700'
-                  : estadoGoogleSheets === 'no-configurado'
-                  ? 'bg-gray-100 text-gray-700'
-                  : 'bg-red-100 text-red-700'
-              }`}>
-                {estadoGoogleSheets === 'configurado' && '📊'}
-                {estadoGoogleSheets === 'sincronizando' && '🔄'}
-                {estadoGoogleSheets === 'no-configurado' && '📋'}
-                {estadoGoogleSheets === 'error' && '❌'}
+              estadoGoogleSheets === 'configurado' 
+                ? 'bg-purple-100 text-purple-700' 
+                : estadoGoogleSheets === 'sincronizando'
+                ? 'bg-blue-100 text-blue-700'
+                : estadoGoogleSheets === 'no-configurado'
+                ? 'bg-gray-100 text-gray-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {estadoGoogleSheets === 'configurado' && '📊'}
+              {estadoGoogleSheets === 'sincronizando' && '🔄'}
+              {estadoGoogleSheets === 'no-configurado' && '📋'}
+              {estadoGoogleSheets === 'error' && '❌'}
                 <span className="hidden sm:inline">
-                  {estadoGoogleSheets === 'configurado' && 'Google Sheets'}
-                  {estadoGoogleSheets === 'sincronizando' && 'Sincronizando...'}
-                  {estadoGoogleSheets === 'no-configurado' && 'Sin Google Sheets'}
-                  {estadoGoogleSheets === 'error' && 'Error Sheets'}
-                </span>
+                {estadoGoogleSheets === 'configurado' && 'Google Sheets'}
+                {estadoGoogleSheets === 'sincronizando' && 'Sincronizando...'}
+                {estadoGoogleSheets === 'no-configurado' && 'Sin Google Sheets'}
+                {estadoGoogleSheets === 'error' && 'Error Sheets'}
+              </span>
                 <span className="sm:hidden">
                   {estadoGoogleSheets === 'configurado' && 'Sheets OK'}
                   {estadoGoogleSheets === 'sincronizando' && 'Sync...'}
@@ -574,11 +574,11 @@ export default function Home() {
             
             <div className="hidden lg:flex items-center gap-4 text-gray-500">
               <span>Cliente: {clienteId.slice(-6)}</span>
-              {ultimaSincronizacion && (
+            {ultimaSincronizacion && (
                 <span>
-                  Última sync: {new Date(ultimaSincronizacion).toLocaleTimeString()}
-                </span>
-              )}
+                Última sync: {new Date(ultimaSincronizacion).toLocaleTimeString()}
+              </span>
+            )}
             </div>
           </div>
         </div>
@@ -652,7 +652,7 @@ export default function Home() {
 
         <div className="space-y-6 lg:space-y-8">
           {/* Formulario de registro - Colapsable */}
-          <div className="bg-white shadow-sm rounded-lg">
+            <div className="bg-white shadow-sm rounded-lg">
             <button
               onClick={() => setFormularioExpandido(!formularioExpandido)}
               className="w-full px-4 sm:px-6 py-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset rounded-t-lg"
@@ -680,43 +680,43 @@ export default function Home() {
           </div>
 
           {/* Lista de asistentes */}
-          <div className="bg-white shadow-sm rounded-lg">
+            <div className="bg-white shadow-sm rounded-lg">
             <div className="px-4 sm:px-6 py-4 border-b border-gray-200">
               <div className="flex flex-col gap-4">
-                <h2 className="text-lg font-medium text-gray-900">👥 Lista de Asistentes</h2>
-                
+                  <h2 className="text-lg font-medium text-gray-900">👥 Lista de Asistentes</h2>
+                  
                 {/* Filtros optimizados para móviles */}
                 <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="🔍 Buscar asistentes..."
-                    value={filtro}
-                    onChange={(e) => setFiltro(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <label className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-md">
                     <input
-                      type="checkbox"
-                      checked={mostrarSoloPendientes}
-                      onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
-                      className="mr-3 w-4 h-4 rounded"
+                      type="text"
+                    placeholder="🔍 Buscar asistentes..."
+                      value={filtro}
+                      onChange={(e) => setFiltro(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
+                  <label className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-2 rounded-md">
+                      <input
+                        type="checkbox"
+                        checked={mostrarSoloPendientes}
+                        onChange={(e) => setMostrarSoloPendientes(e.target.checked)}
+                      className="mr-3 w-4 h-4 rounded"
+                      />
                     Mostrar solo pendientes
-                  </label>
+                    </label>
+                  </div>
                 </div>
               </div>
-            </div>
-            
+              
             <div className="px-2 sm:px-6 py-4">
-              <ListaAsistentes
-                asistentes={asistentesFiltrados}
-                onMarcarAsistencia={marcarAsistencia}
-                onImprimirEscarapela={imprimirEscarapela}
-                onGenerarQR={generarQRAsistente}
-                onEditarAsistente={editarAsistente}
-                onEliminarAsistente={eliminarAsistente}
-                loading={loading}
-              />
+                <ListaAsistentes
+                  asistentes={asistentesFiltrados}
+                  onMarcarAsistencia={marcarAsistencia}
+                  onImprimirEscarapela={imprimirEscarapela}
+                  onGenerarQR={generarQRAsistente}
+                  onEditarAsistente={editarAsistente}
+                  onEliminarAsistente={eliminarAsistente}
+                  loading={loading}
+                />
             </div>
           </div>
         </div>

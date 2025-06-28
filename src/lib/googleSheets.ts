@@ -28,6 +28,15 @@ class GoogleSheetsService {
     return this.sheets
   }
 
+  // Método auxiliar para parsear booleanos de Google Sheets
+  private parseBoolean(value: any): boolean {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true' || value.toLowerCase() === 'verdadero' || value === '1'
+    }
+    return false
+  }
+
   // Leer todos los asistentes desde Google Sheets
   async getAsistentes(): Promise<Asistente[]> {
     try {
@@ -50,20 +59,37 @@ class GoogleSheetsService {
         return []
       }
       
-      return rows
-        .filter(row => row && row.length > 0 && row[0] && row[1]) // Filtrar filas vacías o sin ID/nombre
-        .map((row, index): Asistente => ({
-          id: row[0] || `generated-${Date.now()}-${index}`,
-          nombre: row[1] || '',
-          email: row[2] || '',
-          cargo: row[3] || '',
-          empresa: row[4] || '',
-          presente: row[5] === 'TRUE' || row[5] === 'true' || row[5] === true,
-          escarapelaImpresa: row[6] === 'TRUE' || row[6] === 'true' || row[6] === true,
-          fechaRegistro: row[7] || new Date().toISOString(),
-          horaLlegada: row[8] || undefined,
-          fechaImpresion: row[9] || undefined,
-        }))
+      console.log(`📊 Procesando ${rows.length} filas de Google Sheets`)
+      
+      const asistentes = rows
+        .filter((row, index) => {
+          // Filtrar solo filas completamente vacías
+          const hasContent = row && row.length > 0 && (row[0] || row[1])
+          if (!hasContent) {
+            console.log(`⚠️ Fila ${index + 2} vacía, saltando...`)
+          }
+          return hasContent
+        })
+        .map((row, index): Asistente => {
+          const asistente = {
+            id: row[0] || `generated-${Date.now()}-${index}`,
+            nombre: row[1] || '',
+            email: row[2] || '',
+            cargo: row[3] || '',
+            empresa: row[4] || '',
+            presente: this.parseBoolean(row[5]),
+            escarapelaImpresa: this.parseBoolean(row[6]),
+            fechaRegistro: row[7] || new Date().toISOString(),
+            horaLlegada: row[8] || undefined,
+            fechaImpresion: row[9] || undefined,
+          }
+          
+          console.log(`📝 Procesado: ${asistente.nombre} (ID: ${asistente.id}) - Impresa: ${asistente.escarapelaImpresa}`)
+          return asistente
+        })
+      
+      console.log(`✅ ${asistentes.length} asistentes procesados exitosamente`)
+      return asistentes
     } catch (error) {
       console.error('Error leyendo Google Sheets:', error)
       // No lanzar el error, simplemente retornar array vacío
@@ -248,9 +274,20 @@ class GoogleSheetsService {
       const sheetsAsistentes = await this.getAsistentes()
       console.log(`📊 Obtenidos ${sheetsAsistentes.length} asistentes de Google Sheets`)
       
-      // Si no hay datos en Sheets pero hay en memoria, usar memoria
+      // Si no hay datos en Sheets pero hay en memoria, intentar subir a Sheets
       if (sheetsAsistentes.length === 0 && memoryAsistentes.length > 0) {
-        console.log('📝 Google Sheets vacío, usando datos de memoria')
+        console.log('📝 Google Sheets vacío pero hay datos en memoria, intentando sincronizar...')
+        
+        // Intentar subir datos de memoria a Google Sheets
+        const updatePromises = memoryAsistentes.map(asistente => this.addAsistente(asistente))
+        
+        try {
+          await Promise.allSettled(updatePromises)
+          console.log(`✅ ${memoryAsistentes.length} asistentes sincronizados a Google Sheets`)
+        } catch (uploadError) {
+          console.warn('⚠️ Error subiendo datos a Google Sheets:', uploadError)
+        }
+        
         return memoryAsistentes
       }
       

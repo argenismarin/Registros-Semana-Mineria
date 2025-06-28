@@ -26,31 +26,46 @@ export async function GET() {
     // Obtener asistentes de memoria local
     const memoryAsistentes = db.getAsistentes()
     
-    // Sincronizar con Google Sheets si está configurado
+    // Intentar cargar desde Google Sheets si está configurado
     if (googleSheetsService.isConfigured()) {
       try {
-        console.log('📊 Sincronizando con Google Sheets...')
+        console.log('📊 Cargando desde Google Sheets...')
         
-        // Usar el método de sincronización bidireccional
-        const sincronizados = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
+        // Primero intentar obtener datos directamente de Google Sheets
+        const sheetsAsistentes = await googleSheetsService.getAsistentes()
         
-        // Solo actualizar si hay datos sincronizados válidos
-        if (sincronizados && sincronizados.length > 0) {
-          // Actualizar la base de datos local con los datos sincronizados
-          // Esto asegura que los checkboxes de Google Sheets tengan prioridad
+        if (sheetsAsistentes && sheetsAsistentes.length > 0) {
+          console.log(`✅ ${sheetsAsistentes.length} asistentes encontrados en Google Sheets`)
+          
+          // Actualizar la base de datos local con los datos de Google Sheets
           db.limpiarTodo()
-          sincronizados.forEach(asistente => {
+          sheetsAsistentes.forEach(asistente => {
             db.addAsistente(asistente)
           })
           
-          console.log(`✅ ${sincronizados.length} asistentes sincronizados con Google Sheets`)
-          return NextResponse.json(sincronizados)
+          return NextResponse.json(sheetsAsistentes)
         } else {
-          console.log('📝 No hay datos en Google Sheets, usando memoria local')
+          console.log('📝 Google Sheets está vacío')
+          
+          // Si hay datos en memoria, sincronizarlos con Google Sheets
+          if (memoryAsistentes.length > 0) {
+            console.log('🔄 Sincronizando datos de memoria con Google Sheets...')
+            const sincronizados = await googleSheetsService.syncWithMemoryDatabase(memoryAsistentes)
+            
+            if (sincronizados && sincronizados.length > 0) {
+              db.limpiarTodo()
+              sincronizados.forEach(asistente => {
+                db.addAsistente(asistente)
+              })
+              
+              console.log(`✅ ${sincronizados.length} asistentes sincronizados`)
+              return NextResponse.json(sincronizados)
+            }
+          }
         }
         
       } catch (sheetsError) {
-        console.error('❌ Error sincronizando con Google Sheets:', sheetsError)
+        console.error('❌ Error cargando desde Google Sheets:', sheetsError)
         console.log('📝 Usando datos de memoria local como fallback')
       }
     } else {
