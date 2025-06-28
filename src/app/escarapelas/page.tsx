@@ -36,6 +36,7 @@ export default function EscarapelasPage() {
   const [filtroNombre, setFiltroNombre] = useState('')
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [soloSeleccionados, setSoloSeleccionados] = useState(false)
+  const [soloSinImprimir, setSoloSinImprimir] = useState(false)
   
   // Matriz de selección 11x3
   const FILAS = 11
@@ -77,12 +78,16 @@ export default function EscarapelasPage() {
       )
     }
     
+    if (soloSinImprimir) {
+      filtrados = filtrados.filter(a => !a.escarapelaImpresa)
+    }
+    
     if (soloSeleccionados) {
       filtrados = filtrados.filter(a => asistentesSeleccionados.includes(a.id))
     }
     
     setAsistentesFiltrados(filtrados)
-  }, [asistentes, filtroNombre, filtroEmpresa, soloSeleccionados, asistentesSeleccionados])
+  }, [asistentes, filtroNombre, filtroEmpresa, soloSinImprimir, soloSeleccionados, asistentesSeleccionados])
 
   const cargarAsistentes = async () => {
     try {
@@ -127,6 +132,11 @@ export default function EscarapelasPage() {
 
   const limpiarSeleccionAsistentes = () => {
     setAsistentesSeleccionados([])
+  }
+
+  const seleccionarSoloSinImprimir = () => {
+    const sinImprimir = asistentesFiltrados.filter(a => !a.escarapelaImpresa).map(a => a.id)
+    setAsistentesSeleccionados(sinImprimir)
   }
 
   const togglePosicionMatriz = (posicion: number) => {
@@ -212,6 +222,37 @@ export default function EscarapelasPage() {
         
         const modoTexto = configuracion.modoImpresion === 'normal' ? 'matriz A4' : 'individuales 98mm×128mm'
         toast.success(`PDF de escarapelas generado (${modoTexto}) con ${asistentesDatos.length} escarapelas`)
+        
+        // Marcar escarapelas como impresas
+        try {
+          const responseMarcar = await fetch('/api/asistentes/marcar-impreso', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              asistentesIds: asistentesSeleccionados
+            })
+          })
+
+          if (responseMarcar.ok) {
+            const resultadoMarcar = await responseMarcar.json()
+            console.log('✅ Escarapelas marcadas como impresas:', resultadoMarcar)
+            
+            // Recargar lista de asistentes para reflejar cambios
+            await cargarAsistentes()
+            
+            // Limpiar selección
+            setAsistentesSeleccionados([])
+            
+            toast.info(`${resultadoMarcar.asistentesActualizados} escarapelas marcadas como impresas`)
+          } else {
+            console.warn('⚠️ No se pudieron marcar las escarapelas como impresas')
+          }
+        } catch (errorMarcar) {
+          console.warn('⚠️ Error marcando escarapelas como impresas:', errorMarcar)
+          // No mostramos error al usuario para no interferir con el éxito del PDF
+        }
       } else {
         throw new Error('Error generando PDF')
       }
@@ -397,6 +438,12 @@ export default function EscarapelasPage() {
                       Todos
                     </button>
                     <button
+                      onClick={seleccionarSoloSinImprimir}
+                      className="px-3 py-2 bg-orange-600 text-white text-sm rounded hover:bg-orange-700"
+                    >
+                      🖨️ Sin imprimir
+                    </button>
+                    <button
                       onClick={limpiarSeleccionAsistentes}
                       className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                     >
@@ -406,7 +453,7 @@ export default function EscarapelasPage() {
                 </div>
 
                 {/* Filtros */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                   <input
                     type="text"
                     placeholder="Buscar por nombre..."
@@ -429,6 +476,16 @@ export default function EscarapelasPage() {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
+                      checked={soloSinImprimir}
+                      onChange={(e) => setSoloSinImprimir(e.target.checked)}
+                      className="w-4 h-4 text-orange-600 rounded"
+                    />
+                    <span className="text-sm">🖨️ Solo sin imprimir</span>
+                  </label>
+
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
                       checked={soloSeleccionados}
                       onChange={(e) => setSoloSeleccionados(e.target.checked)}
                       className="w-4 h-4 text-blue-600 rounded"
@@ -439,7 +496,13 @@ export default function EscarapelasPage() {
 
                 <div className="text-sm text-gray-600">
                   Mostrando {asistentesFiltrados.length} de {asistentes.length} asistentes
-                  ({asistentesSeleccionados.length} seleccionados)
+                  ({asistentesSeleccionados.length} seleccionados) •
+                  <span className="text-orange-600 font-medium ml-1">
+                    {asistentes.filter(a => !a.escarapelaImpresa).length} sin imprimir
+                  </span> •
+                  <span className="text-green-600 font-medium ml-1">
+                    {asistentes.filter(a => a.escarapelaImpresa).length} impresas
+                  </span>
                 </div>
               </div>
 
@@ -468,8 +531,22 @@ export default function EscarapelasPage() {
                           {asistente.empresa && <span>{asistente.empresa}</span>}
                         </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {asistente.presente ? '✅ Presente' : '⏳ Pendiente'}
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500 mb-1">
+                          {asistente.presente ? '✅ Presente' : '⏳ Pendiente'}
+                        </div>
+                        <div className="text-xs">
+                          {asistente.escarapelaImpresa ? (
+                            <span className="text-green-600 font-medium">🖨️ Impresa</span>
+                          ) : (
+                            <span className="text-orange-600 font-medium">⏳ Sin imprimir</span>
+                          )}
+                        </div>
+                        {asistente.fechaImpresion && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            {new Date(asistente.fechaImpresion).toLocaleDateString()}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
