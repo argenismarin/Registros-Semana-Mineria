@@ -37,6 +37,7 @@ export default function EscarapelasPage() {
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [soloSeleccionados, setSoloSeleccionados] = useState(false)
   const [soloSinImprimir, setSoloSinImprimir] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
   
   // Matriz de selección 11x3
   const FILAS = 11
@@ -137,6 +138,38 @@ export default function EscarapelasPage() {
   const seleccionarSoloSinImprimir = () => {
     const sinImprimir = asistentesFiltrados.filter(a => !a.escarapelaImpresa).map(a => a.id)
     setAsistentesSeleccionados(sinImprimir)
+  }
+
+  const sincronizarConGoogleSheets = async () => {
+    setSincronizando(true)
+    try {
+      const response = await fetch('/api/sincronizacion/google-sheets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (response.ok) {
+        const resultado = await response.json()
+        console.log('✅ Sincronización completada:', resultado)
+        
+        // Recargar lista de asistentes
+        await cargarAsistentes()
+        
+        toast.success(
+          `🔄 Sincronizado: ${resultado.estadisticas.escarapelasImpresas} impresas, ${resultado.estadisticas.escarapelasPendientes} pendientes`
+        )
+      } else {
+        const error = await response.json()
+        throw new Error(error.error || 'Error en sincronización')
+      }
+    } catch (error) {
+      console.error('❌ Error sincronizando:', error)
+      toast.error('Error sincronizando con Google Sheets')
+    } finally {
+      setSincronizando(false)
+    }
   }
 
   const togglePosicionMatriz = (posicion: number) => {
@@ -245,7 +278,15 @@ export default function EscarapelasPage() {
             // Limpiar selección
             setAsistentesSeleccionados([])
             
-            toast.info(`${resultadoMarcar.asistentesActualizados} escarapelas marcadas como impresas`)
+            // Mostrar información de sincronización
+            const { googleSheets } = resultadoMarcar
+            if (googleSheets.configurado) {
+              toast.success(
+                `🖨️ ${resultadoMarcar.asistentesActualizados} escarapelas impresas • 📊 Google Sheets: ${googleSheets.actualizados} sincronizadas`
+              )
+            } else {
+              toast.info(`${resultadoMarcar.asistentesActualizados} escarapelas marcadas como impresas`)
+            }
           } else {
             console.warn('⚠️ No se pudieron marcar las escarapelas como impresas')
           }
@@ -430,7 +471,7 @@ export default function EscarapelasPage() {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-semibold">👥 Selección de Asistentes</h2>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={seleccionarTodosAsistentes}
                       className="px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700"
@@ -448,6 +489,20 @@ export default function EscarapelasPage() {
                       className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                     >
                       Ninguno
+                    </button>
+                    <button
+                      onClick={sincronizarConGoogleSheets}
+                      disabled={sincronizando}
+                      className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed"
+                    >
+                      {sincronizando ? (
+                        <span className="flex items-center gap-1">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                          Sincronizando...
+                        </span>
+                      ) : (
+                        '🔄 Sincronizar Google Sheets'
+                      )}
                     </button>
                   </div>
                 </div>

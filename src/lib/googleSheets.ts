@@ -358,6 +358,82 @@ class GoogleSheetsService {
     }
   }
 
+  // Método optimizado para actualizar solo el estado de escarapela impresa
+  async updateEscarapelaStatus(asistenteId: string, escarapelaImpresa: boolean, fechaImpresion?: string): Promise<boolean> {
+    try {
+      if (!this.spreadsheetId) {
+        console.warn('GOOGLE_SHEETS_SPREADSHEET_ID no configurado')
+        return false
+      }
+
+      const sheets = await this.initializeSheets()
+      
+      // Buscar la fila del asistente
+      const allData = await sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: 'Asistentes!A2:J',
+      })
+
+      const rows = allData.data.values || []
+      const rowIndex = rows.findIndex(row => row[0] === asistenteId)
+      
+      if (rowIndex === -1) {
+        console.error(`Asistente ${asistenteId} no encontrado en Google Sheets para actualización de escarapela`)
+        return false
+      }
+
+      // Actualizar solo las columnas de escarapela impresa y fecha de impresión (columnas G y J)
+      const updateRange = `Asistentes!G${rowIndex + 2}:J${rowIndex + 2}`
+      const values = [[
+        escarapelaImpresa, // Columna G (escarapelaImpresa)
+        rows[rowIndex][7] || new Date().toISOString(), // Columna H (fechaRegistro) - mantener valor existente
+        rows[rowIndex][8] || '', // Columna I (horaLlegada) - mantener valor existente
+        fechaImpresion || (escarapelaImpresa ? new Date().toISOString() : '') // Columna J (fechaImpresion)
+      ]]
+
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: this.spreadsheetId,
+        range: updateRange,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values,
+        },
+      })
+
+      console.log(`✅ Estado de escarapela actualizado en Google Sheets para ${asistenteId}: ${escarapelaImpresa}`)
+      return true
+    } catch (error) {
+      console.error('Error actualizando estado de escarapela en Google Sheets:', error)
+      return false
+    }
+  }
+
+  // Método optimizado para actualizar múltiples escarapelas de una vez
+  async updateMultipleEscarapelasStatus(asistentesIds: string[], escarapelaImpresa: boolean = true): Promise<{ success: number, failed: string[] }> {
+    const fechaImpresion = escarapelaImpresa ? new Date().toISOString() : ''
+    const failed: string[] = []
+    let success = 0
+
+    console.log(`🔄 Actualizando ${asistentesIds.length} escarapelas en Google Sheets...`)
+
+    for (const asistenteId of asistentesIds) {
+      try {
+        const result = await this.updateEscarapelaStatus(asistenteId, escarapelaImpresa, fechaImpresion)
+        if (result) {
+          success++
+        } else {
+          failed.push(asistenteId)
+        }
+      } catch (error) {
+        console.error(`Error actualizando escarapela ${asistenteId}:`, error)
+        failed.push(asistenteId)
+      }
+    }
+
+    console.log(`✅ Actualizadas ${success} escarapelas en Google Sheets. ${failed.length} fallidas.`)
+    return { success, failed }
+  }
+
   // Método optimizado para actualizar solo el estado de presente
   async updateAsistenciaStatus(asistenteId: string, presente: boolean, horaLlegada?: string): Promise<boolean> {
     try {
