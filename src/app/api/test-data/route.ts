@@ -7,7 +7,7 @@ export async function GET() {
     console.log('🔍 Diagnóstico de datos - iniciando...')
     
     // Datos en memoria
-    const memoryData = db.getAsistentes()
+    const memoryData = db.getAllAsistentes()
     console.log(`💾 Memoria: ${memoryData.length} asistentes`)
     
     let sheetsData: any[] = []

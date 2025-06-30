@@ -184,7 +184,7 @@ class DatabaseMemoria {
     console.log(`➕ Asistente agregado: ${asistente.nombre} (pendiente sincronización)`)
   }
 
-  // Actualizar asistente
+  // Actualizar asistente completo
   updateAsistente(asistente: Asistente): void {
     const timestamp = new Date().toISOString()
     this.asistentes.set(asistente.id, {
@@ -196,6 +196,31 @@ class DatabaseMemoria {
     this.pendingSyncQueue.add(asistente.id)
     this.saveToLocalStorage()
     console.log(`✏️ Asistente actualizado: ${asistente.nombre} (pendiente sincronización)`)
+  }
+
+  // Actualizar asistente por ID y datos parciales (usado por las APIs)
+  updateAsistenteById(id: string, updates: Partial<Asistente>): Asistente | null {
+    const asistente = this.asistentes.get(id)
+    if (!asistente) {
+      console.error(`❌ No se encontró asistente con ID: ${id}`)
+      return null
+    }
+
+    const timestamp = new Date().toISOString()
+    const asistenteActualizado = {
+      ...asistente,
+      ...updates,
+      ultimaModificacion: timestamp,
+      sincronizado: false,
+      dispositivoOrigen: 'local'
+    }
+
+    this.asistentes.set(id, asistenteActualizado)
+    this.pendingSyncQueue.add(id)
+    this.saveToLocalStorage()
+    
+    console.log(`✏️ Asistente ${asistenteActualizado.nombre} actualizado con:`, Object.keys(updates))
+    return asistenteActualizado
   }
 
   // Eliminar asistente
@@ -381,6 +406,11 @@ class DatabaseMemoria {
     this.asistentes.clear()
     this.operacionesRecientes = []
     console.log(`🧹 Base de datos limpiada. ${cantidad} asistentes eliminados`)
+  }
+
+  // Verificar si hay cambios pendientes de sincronización
+  hasPendingChanges(): boolean {
+    return this.pendingSyncQueue.size > 0
   }
 
   // Obtener información del estado de la base de datos

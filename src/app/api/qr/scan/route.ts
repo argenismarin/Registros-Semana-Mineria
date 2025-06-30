@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Marcar como presente
-    const asistenteActualizado = db.updateAsistente(asistenteInfo.id, {
+    const asistenteActualizado = db.updateAsistenteById(asistenteInfo.id, {
       presente: true,
       horaLlegada: new Date().toISOString()
     })

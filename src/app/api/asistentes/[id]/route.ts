@@ -46,7 +46,7 @@ export async function PUT(
     }
 
     // 1. ACTUALIZAR EN MEMORIA LOCAL PRIMERO
-    const asistenteActualizado = db.updateAsistente(id, datosActualizacion)
+    const asistenteActualizado = db.updateAsistenteById(id, datosActualizacion)
     
     if (!asistenteActualizado) {
       return NextResponse.json(

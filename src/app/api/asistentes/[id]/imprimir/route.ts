@@ -26,7 +26,7 @@ export async function POST(
     console.log('👤 Asistente encontrado:', asistenteExistente.nombre)
     
     // Marcar escarapela como impresa
-    const asistenteActualizado = db.updateAsistente(id, {
+    const asistenteActualizado = db.updateAsistenteById(id, {
       escarapelaImpresa: true,
       fechaImpresion: new Date().toISOString()
     })

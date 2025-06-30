@@ -14,7 +14,7 @@ export async function POST() {
     }
 
     // Obtener datos actuales de memoria
-    const memoryAsistentes = db.getAsistentes()
+    const memoryAsistentes = db.getAllAsistentes()
     console.log(`📊 ${memoryAsistentes.length} asistentes en memoria local`)
 
     // Sincronizar con Google Sheets
@@ -33,7 +33,7 @@ export async function POST() {
     }
 
     // Calcular estadísticas de sincronización
-    const datosFinales = db.getAsistentes() // Obtener datos actuales después de sincronización
+    const datosFinales = db.getAllAsistentes() // Obtener datos actuales después de sincronización
     const escarapelasImpresas = datosFinales.filter(a => a.escarapelaImpresa).length
     const escarapelasPendientes = datosFinales.length - escarapelasImpresas
 
@@ -70,7 +70,7 @@ export async function POST() {
 export async function GET() {
   try {
     const configurado = googleSheetsService.isConfigured()
-    const asistentes = db.getAsistentes()
+    const asistentes = db.getAllAsistentes()
     const escarapelasImpresas = asistentes.filter(a => a.escarapelaImpresa).length
     
     return NextResponse.json({

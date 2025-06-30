@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Obtener asistentes de memoria local
-    const memoryAsistentes = db.getAsistentes()
+    const memoryAsistentes = db.getAllAsistentes()
     console.log(`📊 Asistentes en memoria: ${memoryAsistentes.length}`)
 
     // Sincronizar con Google Sheets
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // Actualizar memoria local con datos sincronizados
     sincronizados.forEach(asistente => {
-      db.updateAsistente(asistente.id, asistente)
+      db.updateAsistente(asistente)
     })
 
     // Obtener estadísticas
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Obtener datos básicos
-    const memoryAsistentes = db.getAsistentes()
+    const memoryAsistentes = db.getAllAsistentes()
     const sheetsAsistentes = await googleSheetsService.getAsistentes()
 
     const estadisticas = {

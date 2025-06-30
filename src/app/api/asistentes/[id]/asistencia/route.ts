@@ -26,7 +26,7 @@ export async function POST(
     console.log('👤 Asistente encontrado:', asistenteExistente.nombre)
     
     // 1. ACTUALIZAR EN MEMORIA LOCAL PRIMERO (esto marca como no sincronizado)
-    const asistenteActualizado = db.updateAsistente(id, {
+    const asistenteActualizado = db.updateAsistenteById(id, {
       presente: true,
       horaLlegada: new Date().toISOString()
     })

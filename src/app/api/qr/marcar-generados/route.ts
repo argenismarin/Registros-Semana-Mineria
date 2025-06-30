@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     // Marcar cada asistente como QR generado
     asistentesIds.forEach(id => {
       try {
-        const asistente = db.updateAsistente(id, {
+        const asistente = db.updateAsistenteById(id, {
           qrGenerado: true,
           fechaGeneracionQR: new Date().toISOString()
         })

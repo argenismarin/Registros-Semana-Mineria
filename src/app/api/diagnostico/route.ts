@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     console.log('📊 Google Sheets configurado:', diagnostico.googleSheets.configurado)
 
     // 2. Verificar asistentes en memoria local
-    const asistentesMemoria = db.getAsistentes()
+    const asistentesMemoria = db.getAllAsistentes()
     diagnostico.memoriaLocal.asistentesEnMemoria = asistentesMemoria.length
     
     if (asistentesMemoria.length > 0) {
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const asistentesMemoria = db.getAsistentes()
+    const asistentesMemoria = db.getAllAsistentes()
     console.log(`📊 Sincronizando ${asistentesMemoria.length} asistentes...`)
     
     const resultados = {

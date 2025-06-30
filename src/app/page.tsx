@@ -25,7 +25,7 @@ interface Asistente {
 
 export default function Home() {
   const [asistentes, setAsistentes] = useState<Asistente[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // ✅ ARREGLADO: Iniciar en false, solo true cuando realmente carga
   const [mostrarCamara, setMostrarCamara] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(false)
@@ -176,6 +176,12 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
   const cargarAsistentes = useCallback(async (forceReload = false) => {
     try {
       console.log(`🔄 Cargando asistentes... (forzado: ${forceReload})`)
+      
+      // Solo mostrar loading en la primera carga o si está forzado
+      if (forceReload || asistentes.length === 0) {
+        setLoading(true)
+      }
+
       const response = await fetch('/api/asistentes', {
         headers: {
           'Cache-Control': 'no-cache',
@@ -192,18 +198,16 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
       
       setAsistentes(data)
       setLastSyncTime(new Date())
+      setLoading(false) // ✅ SIEMPRE establecer loading en false después de cargar
       
     } catch (error) {
       console.error('❌ Error cargando asistentes:', error)
       setEstadoSincronizacion('error')
+      setLoading(false) // ✅ SIEMPRE establecer loading en false, incluso en error
       
-      if (loading) {
-        toast.error('Error cargando datos. Reintentando...')
-      }
-    } finally {
-      setLoading(false)
+      toast.error('Error cargando datos. Los datos locales se mantienen disponibles.')
     }
-  }, [clienteId, loading, lastSyncTime])
+  }, [clienteId, asistentes.length]) // ✅ ARREGLADO: Removed loading and lastSyncTime dependencies
 
   // Verificar estado de Google Sheets
   const verificarEstadoGoogleSheets = useCallback(async () => {
@@ -220,7 +224,7 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
       console.error('Error verificando Google Sheets:', error)
       setEstadoGoogleSheets('error')
     }
-  }, [])
+  }, []) // ✅ Sin dependencias - función estable
 
   // Sincronizar manualmente con Google Sheets
   const sincronizarGoogleSheets = async () => {
@@ -310,12 +314,12 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     }
   }
 
-  // Configurar polling inteligente pero ROBUSTO
+  // Configurar carga inicial ÚNICA
   useEffect(() => {
     // Solo cargar asistentes si ya tenemos clienteId
     if (!clienteId) return
     
-    // ✅ CARGA INICIAL INMEDIATA - SIEMPRE ejecutar
+    // ✅ CARGA INICIAL INMEDIATA - SOLO UNA VEZ
     console.log('🚀 Iniciando carga inicial de datos...')
     cargarAsistentes(true)
     
@@ -327,19 +331,13 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     console.log('📱 MODO OFFLINE-FIRST: Polling automático deshabilitado')
     console.log('💡 Usa "Sincronizar Sheets" o "Sync Pendientes" para sincronizar manualmente')
     
-    // Opcional: Configurar verificación de pendientes SOLO cada 10 minutos
-    // const pendientesInterval = setInterval(() => {
-    //   verificarPendientes()
-    // }, 600000) // 10 minutos
-
     // Limpiar intervalos al desmontar
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
-      // clearInterval(pendientesInterval) // Comentado porque no hay polling automático
     }
-  }, [clienteId]) // Solo depender de clienteId para evitar loops
+  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets]) // ✅ ARREGLADO: Incluir las funciones en dependencias
 
   // Marcar asistencia SIN bloqueos - respuesta inmediata
   const marcarAsistencia = async (id: string) => {
@@ -567,40 +565,15 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
   // Editar asistente SIN bloqueos - ultra responsivo
   const editarAsistente = async (asistenteActualizado: Asistente) => {
     try {
-      // 1. ACTUALIZACIÓN OPTIMISTA INMEDIATA
+      // ✅ ACTUALIZACIÓN INMEDIATA - viene del modal de edición ya sincronizado
+      console.log('📝 Actualizando asistente desde modal:', asistenteActualizado.nombre)
+      
       setAsistentes(prev => 
         prev.map(a => a.id === asistenteActualizado.id ? asistenteActualizado : a)
       )
       
-      toast.success(`✅ ${asistenteActualizado.nombre} actualizado exitosamente`)
-      
-      // 2. SINCRONIZACIÓN EN BACKGROUND
-      fetch(`/api/asistentes/${asistenteActualizado.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Cliente-ID': clienteId
-        },
-        body: JSON.stringify(asistenteActualizado)
-      }).then(async response => {
-        if (response.ok) {
-          const resultado = await response.json()
-          console.log('📊 Edición sincronizada:', resultado.asistente?.nombre)
-          
-          // Actualizar con datos reales (por si hay diferencias)
-          if (resultado.asistente) {
-            setAsistentes(prev => 
-              prev.map(a => a.id === asistenteActualizado.id ? resultado.asistente : a)
-            )
-          }
-        } else {
-          console.error('Error sincronizando edición')
-          // Mantener cambios optimistas
-        }
-      }).catch(error => {
-        console.error('Error en sincronización background:', error)
-        // Mantener cambios optimistas
-      })
+      // No mostrar toast aquí porque el modal ya lo hace
+      console.log('✅ Estado actualizado para:', asistenteActualizado.nombre)
       
     } catch (error) {
       console.error('Error editando asistente:', error)

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       detalles: []
     }
 
-    const asistentesExistentes = db.getAsistentes()
+    const asistentesExistentes = db.getAllAsistentes()
     const asistentesProcesados: Asistente[] = []
 
     for (let i = 0; i < asistentes.length; i++) {

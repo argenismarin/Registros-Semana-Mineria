@@ -69,10 +69,23 @@ export default function QRMasivoPage() {
     setLoading(true)
     try {
       const response = await fetch('/api/asistentes')
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
       const data = await response.json()
-      setAsistentes(data)
+      
+      // Asegurar que data es un array
+      if (Array.isArray(data)) {
+        setAsistentes(data)
+      } else {
+        console.warn('Respuesta no es array:', data)
+        setAsistentes([])
+        toast.warning('No se encontraron asistentes')
+      }
     } catch (error) {
+      console.error('Error cargando asistentes:', error)
       toast.error('Error cargando asistentes')
+      setAsistentes([]) // Asegurar que asistentes sea siempre un array
     } finally {
       setLoading(false)
     }
@@ -177,7 +190,7 @@ export default function QRMasivoPage() {
   }
 
   const empresasDisponibles = Array.from(
-    new Set(asistentes.map(a => a.empresa).filter(e => e && e.trim() !== ''))
+    new Set((asistentes || []).map(a => a.empresa).filter(e => e && e.trim() !== ''))
   ).sort()
 
   const formatosInfo = {
