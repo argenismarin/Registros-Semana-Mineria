@@ -33,12 +33,12 @@ class DatabaseMemoria {
   private lastSyncTimestamp: string | null = null
   private pendingSyncQueue: Set<string> = new Set()
   
-  // CACHE INDEFINIDO para modo offline-first
+  // MODO ONLINE - sincronización inmediata
   private cacheTimestamp: number = 0
-  private readonly CACHE_DURATION = Infinity // CACHE INDEFINIDO - solo manual sync
+  private readonly CACHE_DURATION = 0 // SIN CACHE - siempre consultar servidor
   private readonly CACHE_KEY = 'asistentes_cache'
   private isLoading = false
-  private manualSyncMode = true // Modo offline-first activado
+  private manualSyncMode = false // MODO ONLINE ACTIVADO - sincronización inmediata
 
   constructor() {
     this.loadFromLocalStorage()
@@ -81,17 +81,16 @@ class DatabaseMemoria {
     }
   }
 
-  // Verificar si el cache es válido (SIEMPRE válido en modo offline-first)
+  // Verificar si el cache es válido (SIEMPRE INVÁLIDO en modo online)
   isCacheValid(): boolean {
     if (this.manualSyncMode) {
-      console.log(`🔒 MODO OFFLINE-FIRST: Cache siempre válido hasta sincronización manual`)
+      console.log(`🔒 MODO OFFLINE: Cache siempre válido hasta sincronización manual`)
       return true
     }
     
-    const cacheAge = Date.now() - this.cacheTimestamp
-    const isValid = cacheAge < this.CACHE_DURATION
-    console.log(`🕐 Cache ${isValid ? 'VÁLIDO' : 'EXPIRADO'} (${Math.round(cacheAge/1000)}s)`)
-    return isValid
+    // EN MODO ONLINE: Cache siempre inválido para forzar sincronización
+    console.log(`🌐 MODO ONLINE: Cache siempre inválido - sincronización obligatoria`)
+    return false
   }
 
   // Invalidar cache manualmente (para forzar sincronización)
@@ -103,7 +102,7 @@ class DatabaseMemoria {
   // Activar/desactivar modo offline-first
   setOfflineMode(offline: boolean): void {
     this.manualSyncMode = offline
-    console.log(`🔄 Modo offline-first: ${offline ? 'ACTIVADO' : 'DESACTIVADO'}`)
+    console.log(`🔄 Modo offline: ${offline ? 'ACTIVADO' : 'DESACTIVADO'} - Online: ${!offline ? 'ACTIVADO' : 'DESACTIVADO'}`)
   }
 
   // Marcar cache como actualizado

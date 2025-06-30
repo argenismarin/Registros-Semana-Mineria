@@ -21,105 +21,48 @@ async function sincronizarConGoogleSheets(asistente: Asistente) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('📊 GET /api/asistentes - Cargando asistentes...')
+    console.log('🌐 GET /api/asistentes - Cargando asistentes desde Google Sheets...')
     
-    // 1. VERIFICAR ESTADO ACTUAL DE LA MEMORIA
-    const stats = db.getSyncStats()
-    console.log('📊 Estadísticas actuales:', stats)
-    
-    // 2. SI LA MEMORIA ESTÁ VACÍA, CARGAR DATOS DE PRUEBA O GOOGLE SHEETS
-    if (stats.total === 0) {
-      // Si no hay datos en memoria, cargar algunos de prueba
-      console.log('📊 No hay datos en memoria, inicializando datos de prueba...')
-      db.addAsistente({
-        id: 'demo-1',
-        nombre: 'Juan Pérez',
-        email: 'juan@ejemplo.com',
-        cargo: 'Desarrollador',
-        empresa: 'Tech Corp',
-        presente: false,
-        escarapelaImpresa: false,
-        fechaRegistro: new Date().toISOString(),
-        qrGenerado: false
-      })
-      db.addAsistente({
-        id: 'demo-2',
-        nombre: 'María García',
-        email: 'maria@ejemplo.com',
-        cargo: 'Diseñadora',
-        empresa: 'Design Studio',
-        presente: true,
-        escarapelaImpresa: false,
-        fechaRegistro: new Date().toISOString(),
-        horaLlegada: new Date().toISOString(),
-        qrGenerado: true,
-        fechaGeneracionQR: new Date().toISOString()
-      })
-      db.addAsistente({
-        id: 'demo-3',
-        nombre: 'Carlos Rodríguez',
-        email: 'carlos@ejemplo.com',
-        cargo: 'Gerente',
-        empresa: 'Tech Corp',
-        presente: false,
-        escarapelaImpresa: false,
-        fechaRegistro: new Date().toISOString(),
-        qrGenerado: false
-      })
-      console.log('✅ Datos de prueba inicializados')
-    }
-    
-    // 3. INTENTAR SINCRONIZAR CON GOOGLE SHEETS (SIN BLOQUEAR)
-    if (googleSheetsService.isConfigured() && stats.total < 50) {
-      // Solo intentar si no hay muchos datos ya cargados
-      console.log('🔄 Intentando cargar datos adicionales desde Google Sheets...')
-      setTimeout(async () => {
-        try {
-          const sheetsAsistentes = await googleSheetsService.getAsistentes()
-          if (sheetsAsistentes && sheetsAsistentes.length > stats.total) {
-            db.replaceAllAsistentes(sheetsAsistentes)
-            console.log(`✅ Sincronizado: ${sheetsAsistentes.length} asistentes desde Google Sheets`)
-          }
-                 } catch (error: any) {
-           if (error.status === 429) {
-             console.warn('⚠️ Rate limit de Google Sheets alcanzado - usando datos locales')
-           } else {
-             console.warn('⚠️ Error sincronizando con Google Sheets:', error.message || error)
-           }
-         }
-      }, 100) // No bloquear la respuesta principal
+    // 1. VERIFICAR CONFIGURACIÓN DE GOOGLE SHEETS
+    if (!googleSheetsService.isConfigured()) {
+      console.log('❌ Google Sheets no configurado')
+      return NextResponse.json(
+        { error: 'Google Sheets no configurado' },
+        { status: 500 }
+      )
     }
 
-    // 4. OBTENER DATOS FINALES DE MEMORIA (incluye preservados + nuevos)
-    const asistentes = db.getAllAsistentes()
-    console.log(`📋 Retornando ${asistentes.length} asistentes`)
+    // 2. CARGAR SIEMPRE DESDE GOOGLE SHEETS (MODO ONLINE)
+    console.log('🔄 Cargando datos directamente desde Google Sheets...')
+    
+    const sheetsAsistentes = await googleSheetsService.getAsistentes()
+    console.log(`📊 Obtenidos ${sheetsAsistentes.length} asistentes desde Google Sheets`)
+    
+    // 3. ACTUALIZAR MEMORIA LOCAL CON DATOS FRESCOS
+    db.replaceAllAsistentes(sheetsAsistentes)
+    console.log(`✅ Memoria local actualizada con ${sheetsAsistentes.length} asistentes`)
 
-    // 5. INFORMACIÓN DE SINCRONIZACIÓN PARA EL CLIENTE
-    const respuesta = {
-      asistentes,
-      syncInfo: {
-        total: asistentes.length,
-        sincronizados: stats.sincronizados,
-        pendientes: stats.pendientes,
-        ultimaSync: 'local', // ✅ ARREGLADO: Usar valor fijo en lugar de stats.lastSync inexistente
-        fuenteDatos: 'memoria-local'
-      }
-    }
-
-    return NextResponse.json(asistentes) // Solo asistentes para compatibilidad
+    // 4. RETORNAR DATOS FRESCOS
+    return NextResponse.json(sheetsAsistentes)
     
   } catch (error) {
-    console.error('❌ Error en GET /api/asistentes:', error)
+    console.error('❌ Error cargando desde Google Sheets:', error)
     
-    // FALLBACK: devolver datos de memoria aunque haya errores
+    // FALLBACK: intentar devolver datos de memoria como último recurso
     try {
-      const asistentes = db.getAllAsistentes()
-      console.log(`🔄 Fallback: retornando ${asistentes.length} asistentes de memoria`)
-      return NextResponse.json(asistentes)
+      const asistentesMemoria = db.getAllAsistentes()
+      if (asistentesMemoria.length > 0) {
+        console.log(`🔄 Fallback: retornando ${asistentesMemoria.length} asistentes de memoria`)
+        return NextResponse.json(asistentesMemoria)
+      } else {
+        throw new Error('No hay datos en memoria')
+      }
     } catch (fallbackError) {
       console.error('❌ Error crítico en fallback:', fallbackError)
-      // Devolver array vacío como último recurso
-      return NextResponse.json([])
+      return NextResponse.json(
+        { error: 'Error cargando asistentes y no hay datos de respaldo' },
+        { status: 500 }
+      )
     }
   }
 }
@@ -162,22 +105,45 @@ export async function POST(request: NextRequest) {
       qrGenerado: false
     }
 
-    // Agregar a base de datos local
-    db.addAsistente(nuevoAsistente)
-
-    // Sincronizar con Google Sheets si está configurado
-    if (googleSheetsService.isConfigured()) {
-      try {
-        await googleSheetsService.addAsistente(nuevoAsistente)
-        console.log('📊 Asistente sincronizado con Google Sheets')
-      } catch (error) {
-        console.error('⚠️ Error sincronizando con Google Sheets:', error)
-      }
+    // SINCRONIZACIÓN INMEDIATA CON GOOGLE SHEETS
+    if (!googleSheetsService.isConfigured()) {
+      console.log('❌ Google Sheets no configurado')
+      return NextResponse.json(
+        { error: 'Google Sheets no configurado' },
+        { status: 500 }
+      )
     }
 
-    console.log(`✅ Asistente ${nuevoAsistente.nombre} creado exitosamente`)
-
-    return NextResponse.json(nuevoAsistente, { status: 201 })
+    try {
+      console.log('🌐 Sincronizando inmediatamente con Google Sheets:', nuevoAsistente.nombre)
+      
+      const syncSuccess = await googleSheetsService.addAsistente(nuevoAsistente)
+      
+      if (syncSuccess) {
+        // Agregar a base de datos local SOLO después de sincronización exitosa
+        db.addAsistente(nuevoAsistente)
+        db.markAsSynced(nuevoAsistente.id)
+        
+        console.log(`✅ Asistente ${nuevoAsistente.nombre} creado y sincronizado con Google Sheets`)
+        
+        return NextResponse.json({
+          success: true,
+          asistente: nuevoAsistente,
+          mensaje: 'Asistente creado y sincronizado con Google Sheets'
+        }, { status: 201 })
+      } else {
+        throw new Error('Error sincronizando con Google Sheets')
+      }
+    } catch (error) {
+      console.error('❌ Error sincronizando con Google Sheets:', error)
+      return NextResponse.json(
+        { 
+          error: 'Error sincronizando con Google Sheets',
+          details: error instanceof Error ? error.message : 'Error desconocido'
+        },
+        { status: 500 }
+      )
+    }
 
   } catch (error) {
     console.error('❌ Error en POST /api/asistentes:', error)

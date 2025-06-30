@@ -314,82 +314,74 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     }
   }
 
-  // Configurar carga inicial ÚNICA
+  // Configurar carga inicial y polling online
   useEffect(() => {
     // Solo cargar asistentes si ya tenemos clienteId
     if (!clienteId) return
     
-    // ✅ CARGA INICIAL INMEDIATA - SOLO UNA VEZ
-    console.log('🚀 Iniciando carga inicial de datos...')
+    // ✅ CARGA INICIAL INMEDIATA
+    console.log('🌐 Iniciando carga inicial online...')
     cargarAsistentes(true)
     
     // Verificar estado de Google Sheets
     verificarEstadoGoogleSheets()
 
-    // 🚫 POLLING AUTOMÁTICO COMPLETAMENTE DESHABILITADO
-    // Para evitar rate limiting (429) de Google Sheets API
-    console.log('📱 MODO OFFLINE-FIRST: Polling automático deshabilitado')
-    console.log('💡 Usa "Sincronizar Sheets" o "Sync Pendientes" para sincronizar manualmente')
+    // 🌐 MODO ONLINE: Polling cada 30 segundos para mantener datos actualizados
+    console.log('🌐 MODO ONLINE: Configurando polling automático cada 30 segundos')
+    
+    const pollingInterval = setInterval(() => {
+      console.log('🔄 Actualizando datos desde Google Sheets...')
+      cargarAsistentes(false) // Sin mostrar loading para updates automáticos
+    }, 30000) // 30 segundos
     
     // Limpiar intervalos al desmontar
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
+      clearInterval(pollingInterval)
     }
-  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets]) // ✅ ARREGLADO: Incluir las funciones en dependencias
+  }, [clienteId, cargarAsistentes, verificarEstadoGoogleSheets])
 
   // Marcar asistencia SIN bloqueos - respuesta inmediata
   const marcarAsistencia = async (id: string) => {
     try {
-      console.log('✅ Marcando asistencia para:', id)
-      
-      // 1. ACTUALIZACIÓN OPTIMISTA INMEDIATA - sin esperas
-      setAsistentes(prev => 
-        prev.map(a => a.id === id ? {
-          ...a, 
-          presente: true, 
-          horaLlegada: new Date().toLocaleTimeString('es-CO', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-          })
-        } : a)
-      )
-      
-      // 2. NOTIFICACIÓN INMEDIATA
       const asistenteNombre = asistentes.find(a => a.id === id)?.nombre || 'Asistente'
-      toast.success(`✅ ${asistenteNombre} marcado como presente`)
       
-      // 3. SINCRONIZACIÓN EN BACKGROUND (sin bloquear UI)
-      fetch(`/api/asistentes/${id}/asistencia`, {
+      console.log('🌐 Marcando asistencia para:', asistenteNombre)
+      toast.info(`🔄 Marcando ${asistenteNombre} como presente...`)
+      
+      // SINCRONIZACIÓN INMEDIATA CON GOOGLE SHEETS
+      const response = await fetch(`/api/asistentes/${id}/asistencia`, {
         method: 'POST',
         headers: {
-          'X-Cliente-ID': clienteId
+          'X-Cliente-ID': clienteId,
+          'Content-Type': 'application/json'
         }
-      }).then(async response => {
-        if (response.ok) {
-          const resultado = await response.json()
-          console.log('📊 Asistencia sincronizada:', resultado.asistente?.nombre)
-          
-          // Actualizar con datos reales del servidor (por si hay diferencias)
-          if (resultado.asistente) {
-            setAsistentes(prev => 
-              prev.map(a => a.id === id ? resultado.asistente : a)
-            )
-          }
-        } else {
-          console.error('Error sincronizando asistencia')
-          // Mantener cambio optimista - no revertir
-        }
-      }).catch(error => {
-        console.error('Error en sincronización background:', error)
-        // Mantener cambio optimista - no revertir
       })
       
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || `Error HTTP ${response.status}`)
+      }
+      
+      const resultado = await response.json()
+      
+      if (resultado.success && resultado.asistente) {
+        // ACTUALIZAR UI SOLO DESPUÉS DE SINCRONIZACIÓN EXITOSA
+        setAsistentes(prev => 
+          prev.map(a => a.id === id ? resultado.asistente : a)
+        )
+        
+        toast.success(`✅ ${resultado.asistente.nombre} marcado como presente y sincronizado con Google Sheets`)
+        console.log('📊 Asistencia sincronizada correctamente:', resultado.asistente.nombre)
+      } else {
+        throw new Error(resultado.message || 'Error desconocido')
+      }
+      
     } catch (error) {
-      console.error('Error marcando asistencia:', error)
-      toast.error(`Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      console.error('❌ Error marcando asistencia:', error)
+      toast.error(`Error marcando asistencia: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
@@ -509,56 +501,42 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     }
   }
 
-  // Agregar asistente SIN bloqueos - ultra responsivo
+  // Agregar asistente con sincronización inmediata
   const agregarAsistente = async (nuevoAsistente: Omit<Asistente, 'id' | 'presente' | 'escarapelaImpresa' | 'fechaRegistro' | 'fechaImpresion' | 'qrGenerado' | 'fechaGeneracionQR'>) => {
     try {
-      // 1. GENERAR ID TEMPORAL Y AGREGAR INMEDIATAMENTE
-      const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      const asistenteCompleto: Asistente = {
-        ...nuevoAsistente,
-        id: tempId,
-        presente: false,
-        escarapelaImpresa: false,
-        fechaRegistro: new Date().toISOString(),
-        qrGenerado: false
-      }
+      console.log('🌐 Creando asistente:', nuevoAsistente.nombre)
+      toast.info(`🔄 Creando ${nuevoAsistente.nombre}...`)
       
-      // 2. ACTUALIZACIÓN OPTIMISTA INMEDIATA
-      setAsistentes(prev => [...prev, asistenteCompleto])
-      toast.success(`✅ ${nuevoAsistente.nombre} agregado exitosamente`)
-      setFormularioExpandido(false)
-      
-      // 3. SINCRONIZACIÓN EN BACKGROUND
-      fetch('/api/asistentes', {
+      // SINCRONIZACIÓN INMEDIATA CON GOOGLE SHEETS
+      const response = await fetch('/api/asistentes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Cliente-ID': clienteId
         },
         body: JSON.stringify(nuevoAsistente)
-      }).then(async response => {
-        if (response.ok) {
-          const resultado = await response.json()
-          console.log('📊 Asistente sincronizado:', resultado.asistente?.nombre)
-          
-          // Reemplazar temporal con ID real
-          if (resultado.asistente) {
-            setAsistentes(prev => 
-              prev.map(a => a.id === tempId ? resultado.asistente : a)
-            )
-          }
-        } else {
-          console.error('Error sincronizando nuevo asistente')
-          // Mantener en lista con ID temporal
-        }
-      }).catch(error => {
-        console.error('Error en sincronización background:', error)
-        // Mantener en lista con ID temporal
       })
       
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || `Error HTTP ${response.status}`)
+      }
+      
+      const resultado = await response.json()
+      
+      if (resultado.success && resultado.asistente) {
+        // ACTUALIZAR UI SOLO DESPUÉS DE SINCRONIZACIÓN EXITOSA
+        setAsistentes(prev => [...prev, resultado.asistente])
+        toast.success(`✅ ${resultado.asistente.nombre} creado y sincronizado con Google Sheets`)
+        setFormularioExpandido(false)
+        console.log('📊 Asistente creado correctamente:', resultado.asistente.nombre)
+      } else {
+        throw new Error(resultado.mensaje || 'Error desconocido')
+      }
+      
     } catch (error) {
-      console.error('Error agregando asistente:', error)
-      toast.error(`Error agregando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      console.error('❌ Error creando asistente:', error)
+      toast.error(`Error creando asistente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
@@ -723,13 +701,13 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
             </div>
           </div>
 
-          {/* Indicador de modo offline-first */}
-          <div className="mt-4 mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="flex items-center gap-2 text-blue-800">
-              <span className="text-lg">📱</span>
+          {/* Indicador de modo online */}
+          <div className="mt-4 mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 text-green-800">
+              <span className="text-lg">🌐</span>
               <div>
-                <div className="font-medium text-sm">MODO OFFLINE-FIRST ACTIVADO</div>
-                <div className="text-xs text-blue-600">Sin polling automático para evitar rate limiting. Todas las operaciones funcionan offline.</div>
+                <div className="font-medium text-sm">MODO ONLINE ACTIVADO</div>
+                <div className="text-xs text-green-600">Sincronización inmediata con Google Sheets. Polling automático cada 30 segundos.</div>
               </div>
             </div>
           </div>

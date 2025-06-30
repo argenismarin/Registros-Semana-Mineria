@@ -44,32 +44,48 @@ export async function POST(
 
     console.log('✅ Asistente actualizado en memoria (pendiente sincronización):', asistenteActualizado.nombre)
 
-    // 2. SINCRONIZAR CON GOOGLE SHEETS DE FORMA OPTIMIZADA (USANDO BATCH)
+    // 2. SINCRONIZACIÓN INMEDIATA CON GOOGLE SHEETS (SIN BATCHING)
     let syncSuccess = false
     if (googleSheetsService.isConfigured()) {
       try {
-        // Usar método optimizado con batching - se procesa automáticamente en lotes
-        syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, true)
+        console.log('🌐 Sincronizando inmediatamente con Google Sheets:', asistenteActualizado.nombre)
+        
+        // USAR SINCRONIZACIÓN INMEDIATA SIN BATCHING
+        syncSuccess = await googleSheetsService.updateAsistente(asistenteActualizado)
         
         if (syncSuccess) {
-          // 3. MARCAR COMO SINCRONIZADO (el batching lo sincronizará realmente después)
-          console.log('📦 ✅ Asistencia agregada al lote para sincronización:', asistenteActualizado.nombre)
+          db.markAsSynced(id)
+          console.log('📊 ✅ Asistencia sincronizada inmediatamente con Google Sheets:', asistenteActualizado.nombre)
         } else {
-          console.log('📊 ⚠️ Error agregando al lote - intentando sincronización inmediata')
-          // Fallback: sincronización inmediata si el batch falla
-          syncSuccess = await googleSheetsService.updateAsistenteOptimized(asistenteActualizado, false)
-          if (syncSuccess) {
-            db.markAsSynced(id)
-            console.log('📊 ✅ Asistencia sincronizada inmediatamente:', asistenteActualizado.nombre)
-          }
+          console.log('❌ Error sincronizando con Google Sheets')
+          return NextResponse.json(
+            { 
+              success: false,
+              error: 'Error sincronizando con Google Sheets' 
+            },
+            { status: 500 }
+          )
         }
       } catch (error) {
-        console.error('⚠️ Error sincronizando asistencia con Google Sheets:', error)
-        syncSuccess = false
-        // NO retornar error aquí - el cambio se mantiene en memoria local para sincronización posterior
+        console.error('❌ Error sincronizando asistencia con Google Sheets:', error)
+        return NextResponse.json(
+          { 
+            success: false,
+            error: 'Error sincronizando con Google Sheets',
+            details: error instanceof Error ? error.message : 'Error desconocido'
+          },
+          { status: 500 }
+        )
       }
     } else {
-      console.log('⚠️ Google Sheets no configurado, asistencia solo en memoria local')
+      console.log('❌ Google Sheets no configurado')
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Google Sheets no configurado' 
+        },
+        { status: 500 }
+      )
     }
 
     // 4. NOTIFICAR A OTROS CLIENTES VÍA SOCKET.IO (no bloquear respuesta)
@@ -90,17 +106,12 @@ export async function POST(
       console.error('⚠️ Error notificando via socket (no crítico):', error)
     }
 
-    // 5. RESPUESTA SIEMPRE EXITOSA SI SE GUARDÓ EN MEMORIA
+    // 5. RESPUESTA EXITOSA SOLO SI SE SINCRONIZÓ CORRECTAMENTE
     const respuesta = {
       success: true,
       asistente: asistenteActualizado,
-      message: `${asistenteActualizado.nombre} marcado como presente`,
-      sincronizado: syncSuccess,
-      pendientesSync: db.hasPendingChanges() ? db.getPendingSyncAsistentes().length : 0
-    }
-
-    if (!syncSuccess && googleSheetsService.isConfigured()) {
-      respuesta.message += ' (sincronización pendiente)'
+      message: `${asistenteActualizado.nombre} marcado como presente y sincronizado con Google Sheets`,
+      sincronizado: true
     }
 
     return NextResponse.json(respuesta)
