@@ -60,9 +60,41 @@ export default function ListaAsistentes({
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600">Cargando asistentes...</span>
+      <div className="space-y-3">
+        {/* Skeleton Loader más atractivo */}
+        <div className="text-center py-4">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+            <span className="text-green-700 font-medium">🌐 Cargando asistentes desde Google Sheets...</span>
+          </div>
+        </div>
+        
+        {/* Skeleton Cards */}
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div key={index} className="p-4 rounded-lg border-2 border-gray-200 bg-white animate-pulse">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-6 bg-gray-300 rounded w-32"></div>
+                  <div className="h-5 bg-gray-200 rounded w-16"></div>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 bg-gray-200 rounded w-48"></div>
+                  <div className="h-4 bg-gray-200 rounded w-36"></div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-8 bg-gray-200 rounded w-16"></div>
+                <div className="h-8 bg-gray-200 rounded w-20"></div>
+                <div className="h-8 bg-gray-200 rounded w-16"></div>
+              </div>
+            </div>
+          </div>
+        ))}
+        
+        <div className="text-center py-2">
+          <p className="text-sm text-gray-500">Esto puede tomar unos segundos la primera vez...</p>
+        </div>
       </div>
     )
   }

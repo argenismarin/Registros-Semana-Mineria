@@ -172,7 +172,7 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     }
   }, [sincronizarPendientes])
 
-  // Cargar asistentes SIN bloqueos - ultra responsivo
+  // Cargar asistentes HÍBRIDO - cache rápido + actualización background
   const cargarAsistentes = useCallback(async (forceReload = false) => {
     try {
       console.log(`🔄 Cargando asistentes... (forzado: ${forceReload})`)
@@ -182,7 +182,8 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
         setLoading(true)
       }
 
-      const response = await fetch('/api/asistentes', {
+      const url = `/api/asistentes${forceReload ? '?force=true' : ''}`
+      const response = await fetch(url, {
         headers: {
           'Cache-Control': 'no-cache',
           'X-Cliente-ID': clienteId
@@ -194,7 +195,24 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
       }
       
       const data: Asistente[] = await response.json()
-      console.log(`✅ ${data.length} asistentes cargados`)
+      
+      // Obtener headers informativos
+      const cacheStatus = response.headers.get('X-Cache-Status') || 'UNKNOWN'
+      const backgroundUpdate = response.headers.get('X-Background-Update') === 'true'
+      
+      console.log(`✅ ${data.length} asistentes cargados (${cacheStatus})`)
+      
+      // Mostrar feedback apropiado según el tipo de carga
+      if (cacheStatus === 'HIT') {
+        console.log('⚡ Carga rápida desde cache')
+        if (backgroundUpdate) {
+          console.log('🔄 Actualización en background iniciada')
+        }
+      } else if (cacheStatus === 'MISS') {
+        console.log('🌐 Carga completa desde Google Sheets')
+      } else if (cacheStatus === 'FALLBACK') {
+        console.log('🔄 Carga desde memoria (fallback)')
+      }
       
       setAsistentes(data)
       setLastSyncTime(new Date())
@@ -326,13 +344,13 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
     // Verificar estado de Google Sheets
     verificarEstadoGoogleSheets()
 
-    // 🌐 MODO ONLINE: Polling cada 30 segundos para mantener datos actualizados
-    console.log('🌐 MODO ONLINE: Configurando polling automático cada 30 segundos')
+    // 🌐 MODO HÍBRIDO: Polling cada 60 segundos para mantener datos actualizados
+    console.log('🌐 MODO HÍBRIDO: Configurando polling automático cada 60 segundos')
     
     const pollingInterval = setInterval(() => {
       console.log('🔄 Actualizando datos desde Google Sheets...')
-      cargarAsistentes(false) // Sin mostrar loading para updates automáticos
-    }, 30000) // 30 segundos
+      cargarAsistentes(false) // Sin mostrar loading para updates automáticos (usará cache híbrido)
+    }, 60000) // 60 segundos (más espaciado para mejor UX)
     
     // Limpiar intervalos al desmontar
     return () => {
@@ -701,13 +719,13 @@ const MAX_PENDIENTES_AUTO_SYNC = 3 // Solo 3 pendientes para evitar sobrecarga
             </div>
           </div>
 
-          {/* Indicador de modo online */}
-          <div className="mt-4 mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+          {/* Indicador de modo híbrido */}
+          <div className="mt-4 mb-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-3">
             <div className="flex items-center gap-2 text-green-800">
-              <span className="text-lg">🌐</span>
+              <span className="text-lg">⚡</span>
               <div>
-                <div className="font-medium text-sm">MODO ONLINE ACTIVADO</div>
-                <div className="text-xs text-green-600">Sincronización inmediata con Google Sheets. Polling automático cada 30 segundos.</div>
+                <div className="font-medium text-sm">MODO HÍBRIDO ACTIVADO</div>
+                <div className="text-xs text-green-600">Carga rápida + sincronización automática. Polling cada 60 segundos.</div>
               </div>
             </div>
           </div>

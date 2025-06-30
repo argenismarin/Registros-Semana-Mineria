@@ -33,12 +33,13 @@ class DatabaseMemoria {
   private lastSyncTimestamp: string | null = null
   private pendingSyncQueue: Set<string> = new Set()
   
-  // MODO ONLINE - sincronización inmediata
+  // MODO ONLINE HÍBRIDO - cache corto para carga rápida + actualización background
   private cacheTimestamp: number = 0
-  private readonly CACHE_DURATION = 0 // SIN CACHE - siempre consultar servidor
+  private readonly CACHE_DURATION = 5000 // CACHE CORTO: 5 segundos para carga rápida inicial
   private readonly CACHE_KEY = 'asistentes_cache'
   private isLoading = false
   private manualSyncMode = false // MODO ONLINE ACTIVADO - sincronización inmediata
+  private backgroundUpdateInProgress = false
 
   constructor() {
     this.loadFromLocalStorage()
@@ -81,16 +82,23 @@ class DatabaseMemoria {
     }
   }
 
-  // Verificar si el cache es válido (SIEMPRE INVÁLIDO en modo online)
+  // Verificar si el cache es válido (HÍBRIDO: cache corto para UX rápida)
   isCacheValid(): boolean {
     if (this.manualSyncMode) {
       console.log(`🔒 MODO OFFLINE: Cache siempre válido hasta sincronización manual`)
       return true
     }
     
-    // EN MODO ONLINE: Cache siempre inválido para forzar sincronización
-    console.log(`🌐 MODO ONLINE: Cache siempre inválido - sincronización obligatoria`)
-    return false
+    const cacheAge = Date.now() - this.cacheTimestamp
+    const isValid = cacheAge < this.CACHE_DURATION
+    
+    if (isValid) {
+      console.log(`⚡ CACHE HÍBRIDO: Cache válido (${Math.round(cacheAge/1000)}s) - carga rápida`)
+    } else {
+      console.log(`🌐 CACHE HÍBRIDO: Cache expirado (${Math.round(cacheAge/1000)}s) - consultar Google Sheets`)
+    }
+    
+    return isValid
   }
 
   // Invalidar cache manualmente (para forzar sincronización)
@@ -133,8 +141,9 @@ class DatabaseMemoria {
   }
 
   // Reemplazar todos los asistentes (preservando cambios locales)
-  replaceAllAsistentes(nuevosAsistentes: Asistente[]): void {
-    console.log(`📊 Reemplazando ${nuevosAsistentes.length} asistentes (preservando ${this.pendingSyncQueue.size} pendientes)`)
+  replaceAllAsistentes(nuevosAsistentes: Asistente[], fromBackground = false): void {
+    const source = fromBackground ? 'background' : 'main'
+    console.log(`📊 [${source}] Reemplazando ${nuevosAsistentes.length} asistentes (preservando ${this.pendingSyncQueue.size} pendientes)`)
     
     // Guardar cambios pendientes
     const pendientesData = new Map()
@@ -160,13 +169,27 @@ class DatabaseMemoria {
     // Restaurar cambios pendientes
     pendientesData.forEach((data, id) => {
       this.asistentes.set(id, data)
-      console.log(`🔄 Restaurado cambio pendiente: ${data.nombre}`)
+      if (!fromBackground) console.log(`🔄 Restaurado cambio pendiente: ${data.nombre}`)
     })
     
     // Actualizar cache
     this.refreshCache()
     
-    console.log(`✅ Base reemplazada: ${this.asistentes.size} total (${this.pendingSyncQueue.size} pendientes)`)
+    console.log(`✅ [${source}] Base reemplazada: ${this.asistentes.size} total (${this.pendingSyncQueue.size} pendientes)`)
+    
+    if (fromBackground) {
+      this.backgroundUpdateInProgress = false
+    }
+  }
+
+  // Verificar si hay una actualización en background en progreso
+  isBackgroundUpdateInProgress(): boolean {
+    return this.backgroundUpdateInProgress
+  }
+
+  // Marcar actualización en background como iniciada
+  startBackgroundUpdate(): void {
+    this.backgroundUpdateInProgress = true
   }
 
   // Agregar asistente

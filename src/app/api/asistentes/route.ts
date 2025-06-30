@@ -21,7 +21,10 @@ async function sincronizarConGoogleSheets(asistente: Asistente) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🌐 GET /api/asistentes - Cargando asistentes desde Google Sheets...')
+    const url = new URL(request.url)
+    const forceReload = url.searchParams.get('force') === 'true'
+    
+    console.log(`🌐 GET /api/asistentes - MODO HÍBRIDO: ${forceReload ? 'Forzado' : 'Inteligente'}`)
     
     // 1. VERIFICAR CONFIGURACIÓN DE GOOGLE SHEETS
     if (!googleSheetsService.isConfigured()) {
@@ -32,18 +35,57 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 2. CARGAR SIEMPRE DESDE GOOGLE SHEETS (MODO ONLINE)
-    console.log('🔄 Cargando datos directamente desde Google Sheets...')
-    
+    // 2. CARGA HÍBRIDA: rápida con cache + actualización background
+    if (!forceReload && db.isCacheValid() && db.getAllAsistentes().length > 0) {
+      console.log('⚡ CARGA RÁPIDA: Usando cache + actualizando en background')
+      
+      // Retornar cache inmediatamente
+      const asistentesCacheados = db.getAllAsistentes()
+      
+      // Iniciar actualización en background (sin bloquear respuesta)
+      if (!db.isBackgroundUpdateInProgress()) {
+        console.log('🔄 Iniciando actualización en background...')
+        db.startBackgroundUpdate()
+        
+        // Actualización asíncrona sin await (no bloquea la respuesta)
+        googleSheetsService.getAsistentes()
+          .then(asistentesSheets => {
+            if (asistentesSheets && asistentesSheets.length >= 0) {
+              db.replaceAllAsistentes(asistentesSheets, true) // true = background update
+              console.log('✅ Actualización en background completada')
+            }
+          })
+          .catch(error => {
+            console.error('❌ Error en actualización background:', error)
+            // No falla la operación principal
+          })
+      }
+      
+      console.log(`⚡ Respuesta rápida: ${asistentesCacheados.length} asistentes (cache)`)
+      return NextResponse.json(asistentesCacheados, {
+        headers: {
+          'X-Cache-Status': 'HIT',
+          'X-Background-Update': db.isBackgroundUpdateInProgress() ? 'true' : 'false'
+        }
+      })
+    }
+
+    // 3. CARGA COMPLETA desde Google Sheets
+    console.log('🌐 CARGA COMPLETA: Consultando Google Sheets...')
     const sheetsAsistentes = await googleSheetsService.getAsistentes()
     console.log(`📊 Obtenidos ${sheetsAsistentes.length} asistentes desde Google Sheets`)
     
-    // 3. ACTUALIZAR MEMORIA LOCAL CON DATOS FRESCOS
+    // 4. ACTUALIZAR MEMORIA LOCAL CON DATOS FRESCOS
     db.replaceAllAsistentes(sheetsAsistentes)
     console.log(`✅ Memoria local actualizada con ${sheetsAsistentes.length} asistentes`)
 
-    // 4. RETORNAR DATOS FRESCOS
-    return NextResponse.json(sheetsAsistentes)
+    // 5. RETORNAR DATOS FRESCOS
+    return NextResponse.json(sheetsAsistentes, {
+      headers: {
+        'X-Cache-Status': 'MISS',
+        'X-Source': 'google-sheets'
+      }
+    })
     
   } catch (error) {
     console.error('❌ Error cargando desde Google Sheets:', error)
@@ -53,7 +95,12 @@ export async function GET(request: NextRequest) {
       const asistentesMemoria = db.getAllAsistentes()
       if (asistentesMemoria.length > 0) {
         console.log(`🔄 Fallback: retornando ${asistentesMemoria.length} asistentes de memoria`)
-        return NextResponse.json(asistentesMemoria)
+        return NextResponse.json(asistentesMemoria, {
+          headers: {
+            'X-Cache-Status': 'FALLBACK',
+            'X-Source': 'memory'
+          }
+        })
       } else {
         throw new Error('No hay datos en memoria')
       }
